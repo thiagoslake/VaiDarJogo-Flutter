@@ -177,6 +177,14 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   
+  # Fonts - Noto Sans para caracteres especiais
+  fonts:
+    - family: NotoSans
+      fonts:
+        - asset: fonts/NotoSans-Regular.ttf
+        - asset: fonts/NotoSans-Bold.ttf
+          weight: 700
+  
   # Assets
   assets:
     - assets/images/

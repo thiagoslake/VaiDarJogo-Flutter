@@ -9,6 +9,16 @@ import 'widgets/auth_guard.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Configurar Google Fonts para evitar problemas com Noto fonts
+  try {
+    await GoogleFonts.pendingFonts([
+      GoogleFonts.roboto(),
+    ]);
+  } catch (e) {
+    print('⚠️ Aviso: Erro ao carregar Google Fonts: $e');
+    // Continuar mesmo com erro de fontes
+  }
+
   // Configurar tratamento de erros para suprimir logs automáticos em modo release
   if (kReleaseMode) {
     FlutterError.onError = (FlutterErrorDetails details) {
@@ -54,6 +64,17 @@ class VaiDarJogoApp extends StatelessWidget {
         fontFamily: 'Roboto',
         textTheme: GoogleFonts.robotoTextTheme(
           ThemeData.light().textTheme,
+        ).copyWith(
+          // Configurar fallback para caracteres especiais usando fontes locais
+          bodyLarge: ThemeData.light().textTheme.bodyLarge?.copyWith(
+                fontFamily: 'NotoSans',
+              ),
+          bodyMedium: ThemeData.light().textTheme.bodyMedium?.copyWith(
+                fontFamily: 'NotoSans',
+              ),
+          bodySmall: ThemeData.light().textTheme.bodySmall?.copyWith(
+                fontFamily: 'NotoSans',
+              ),
         ),
       ),
       darkTheme: ThemeData(
@@ -65,6 +86,17 @@ class VaiDarJogoApp extends StatelessWidget {
         fontFamily: 'Roboto',
         textTheme: GoogleFonts.robotoTextTheme(
           ThemeData.dark().textTheme,
+        ).copyWith(
+          // Configurar fallback para caracteres especiais usando fontes locais
+          bodyLarge: ThemeData.dark().textTheme.bodyLarge?.copyWith(
+                fontFamily: 'NotoSans',
+              ),
+          bodyMedium: ThemeData.dark().textTheme.bodyMedium?.copyWith(
+                fontFamily: 'NotoSans',
+              ),
+          bodySmall: ThemeData.dark().textTheme.bodySmall?.copyWith(
+                fontFamily: 'NotoSans',
+              ),
         ),
       ),
       home: const AuthGuard(
