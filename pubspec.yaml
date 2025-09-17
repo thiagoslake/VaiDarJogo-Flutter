@@ -1,0 +1,257 @@
+name: vaidarjogo
+description: Aplicativo mobile para gestão de jogos de futebol
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+  flutter: ">=3.16.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # =====================================================
+  # 🎨 UI & DESIGN
+  # =====================================================
+  
+  # Material Design 3 (incluído no Flutter SDK)
+  
+  # Ícones
+  cupertino_icons: ^1.0.6
+  
+  # Fontes
+  google_fonts: ^6.1.0
+  
+  # Animações
+  lottie: ^2.7.0
+  flutter_animate: ^4.2.0
+  
+  # =====================================================
+  # 🚀 STATE MANAGEMENT
+  # =====================================================
+  
+  # Riverpod para gerenciamento de estado
+  flutter_riverpod: ^2.4.9
+  riverpod_annotation: ^2.3.3
+  
+  # =====================================================
+  # 🧭 NAVEGAÇÃO
+  # =====================================================
+  
+  # GoRouter para navegação
+  go_router: ^13.0.1
+  
+  # =====================================================
+  # 🌐 NETWORK & API
+  # =====================================================
+  
+  # HTTP client
+  dio: ^5.4.0
+  
+  # Supabase client
+  supabase_flutter: ^2.3.4
+  
+  # Google Places API para autocompletar endereços
+  google_places_flutter: ^2.0.8
+  
+  # =====================================================
+  # 💾 STORAGE & DATABASE
+  # =====================================================
+  
+  # Local storage
+  shared_preferences: ^2.2.2
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  
+  # SQLite local (para cache offline)
+  sqflite: ^2.3.0
+  path: ^1.8.3
+  
+  # =====================================================
+  # 🔐 AUTHENTICATION & SECURITY
+  # =====================================================
+  
+  # Biometria
+  local_auth: ^2.1.7
+  
+  # Criptografia
+  crypto: ^3.0.3
+  
+  # =====================================================
+  # 📱 NOTIFICATIONS
+  # =====================================================
+  
+  # Push notifications (comentado temporariamente)
+  # firebase_messaging: ^14.7.10
+  # firebase_core: ^2.24.2
+  
+  # =====================================================
+  # 📊 CHARTS & GRAPHS
+  # =====================================================
+  
+  # Gráficos
+  fl_chart: ^0.66.0
+  
+  # =====================================================
+  # 🖼️ IMAGES & MEDIA
+  # =====================================================
+  
+  # Carregamento de imagens
+  cached_network_image: ^3.3.0
+  image_picker: ^1.0.4
+  
+  # =====================================================
+  # 📅 DATE & TIME
+  # =====================================================
+  
+  # Manipulação de datas
+  intl: ^0.20.2
+  
+  # =====================================================
+  # 🔧 UTILITIES
+  # =====================================================
+  
+  # Validação de formulários
+  form_validator: ^2.1.1
+  
+  # Permissões
+  permission_handler: ^11.1.0
+  
+  # Geolocalização
+  geolocator: ^10.1.0
+  
+  # QR Code
+  qr_flutter: ^4.1.0
+  
+  # Compartilhamento
+  share_plus: ^7.2.1
+  
+  # URL launcher
+  url_launcher: ^6.2.2
+  
+  # =====================================================
+  # 🌍 INTERNATIONALIZATION
+  # =====================================================
+  
+  # Localização
+  easy_localization: ^3.0.3
+  
+  # =====================================================
+  # 📱 PLATFORM SPECIFIC
+  # =====================================================
+  
+  # Android specific
+  android_intent_plus: ^4.0.3
+  
+  # iOS specific
+  device_info_plus: ^9.1.1
+  
+  # =====================================================
+  # 🧪 TESTING
+  # =====================================================
+  
+  # Testes
+  flutter_test:
+    sdk: flutter
+  
+  # Mock para testes
+  mockito: ^5.4.4
+  build_runner: ^2.4.7
+
+dev_dependencies:
+  # Code generation
+  riverpod_generator: ^2.3.9
+  
+  # Linting
+  flutter_lints: ^3.0.1
+  
+  # Coverage
+  coverage: ^1.6.3
+
+# =====================================================
+# 🎯 FLUTTER CONFIGURATION
+# =====================================================
+
+flutter:
+  uses-material-design: true
+  
+  # Assets
+  assets:
+    - assets/images/
+    - assets/icons/
+    - assets/animations/
+    - assets/translations/
+  
+
+  
+
+
+# =====================================================
+# 🔧 BUILD CONFIGURATION
+# =====================================================
+
+# Build runner configuration
+build:
+  targets:
+    $default:
+      builders:
+        riverpod_generator:riverpod_generator:
+          options:
+            provider_name_suffix: "Provider"
+            family_name_suffix: "Family"
+            keep_private_providers: true
+            enable_provider_override: true
+            enable_enum_case: true
+            enable_asserts: true
+            enable_connection_state: true
+            enable_global_provider: true
+
+# =====================================================
+# 📋 SCRIPTS
+# =====================================================
+
+scripts:
+  # Geração de código
+  generate: dart run build_runner build --delete-conflicting-outputs
+  
+  # Limpeza
+  clean: flutter clean && dart run build_runner clean
+  
+  # Testes
+  test: flutter test
+  test:coverage: flutter test --coverage
+  
+  # Build
+  build:android: flutter build apk --release
+  build:ios: flutter build ios --release
+  
+  # Deploy
+  deploy:android: flutter build appbundle --release
+  deploy:ios: flutter build ios --release
+
+# =====================================================
+# 📚 DOCUMENTATION
+# =====================================================
+
+# Informações do projeto
+homepage: https://github.com/vaidarjogo/flutter-app
+repository: https://github.com/vaidarjogo/flutter-app
+issue_tracker: https://github.com/vaidarjogo/flutter-app/issues
+
+# Licença
+license: MIT
+
+# Palavras-chave
+keywords:
+  - flutter
+  - dart
+  - mobile
+  - futebol
+  - jogos
+  - gestão
+  - supabase
+  - postgresql
+  - riverpod
+  - material-design
