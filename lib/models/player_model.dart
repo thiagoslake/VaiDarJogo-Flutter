@@ -2,7 +2,6 @@ class Player {
   final String id;
   final String name;
   final String phoneNumber;
-  final String type; // 'monthly' ou 'casual'
   final DateTime? birthDate;
   final String? primaryPosition;
   final String? secondaryPosition;
@@ -16,7 +15,6 @@ class Player {
     required this.id,
     required this.name,
     required this.phoneNumber,
-    required this.type,
     this.birthDate,
     this.primaryPosition,
     this.secondaryPosition,
@@ -32,7 +30,6 @@ class Player {
       id: map['id'].toString(),
       name: map['name'] ?? '',
       phoneNumber: map['phone_number'] ?? '',
-      type: map['type'] ?? 'casual',
       birthDate:
           map['birth_date'] != null ? DateTime.parse(map['birth_date']) : null,
       primaryPosition: map['primary_position'],
@@ -50,7 +47,6 @@ class Player {
       'id': id,
       'name': name,
       'phone_number': phoneNumber,
-      'type': type,
       'birth_date': birthDate?.toIso8601String().split('T')[0],
       'primary_position': primaryPosition,
       'secondary_position': secondaryPosition,
@@ -66,7 +62,6 @@ class Player {
     String? id,
     String? name,
     String? phoneNumber,
-    String? type,
     DateTime? birthDate,
     String? primaryPosition,
     String? secondaryPosition,
@@ -80,7 +75,6 @@ class Player {
       id: id ?? this.id,
       name: name ?? this.name,
       phoneNumber: phoneNumber ?? this.phoneNumber,
-      type: type ?? this.type,
       birthDate: birthDate ?? this.birthDate,
       primaryPosition: primaryPosition ?? this.primaryPosition,
       secondaryPosition: secondaryPosition ?? this.secondaryPosition,
@@ -103,6 +97,6 @@ class Player {
 
   @override
   String toString() {
-    return 'Player(id: $id, name: $name, type: $type, status: $status)';
+    return 'Player(id: $id, name: $name, status: $status)';
   }
 }

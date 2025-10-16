@@ -38,32 +38,28 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   /// Inicializar estado de autenticação
+  /// Sempre inicia na tela de login, independente de sessões anteriores
   Future<void> _initializeAuth() async {
     state = state.copyWith(isLoading: true);
 
     try {
-      final user = await AuthService.getCurrentUser();
-      if (user != null) {
-        state = state.copyWith(
-          user: user,
-          isAuthenticated: true,
-          isLoading: false,
-          error: null,
-        );
-      } else {
-        state = state.copyWith(
-          user: null,
-          isAuthenticated: false,
-          isLoading: false,
-          error: null,
-        );
-      }
-    } catch (e) {
+      // Sempre definir como não autenticado na inicialização
+      // para forçar o usuário a fazer login novamente
       state = state.copyWith(
         user: null,
         isAuthenticated: false,
         isLoading: false,
-        error: e.toString(),
+        error: null,
+      );
+
+      print('🔐 Aplicativo configurado para sempre iniciar na tela de login');
+    } catch (e) {
+      print('❌ Erro na inicialização da autenticação: $e');
+      state = state.copyWith(
+        user: null,
+        isAuthenticated: false,
+        isLoading: false,
+        error: 'Erro ao inicializar autenticação: ${e.toString()}',
       );
     }
   }
@@ -116,6 +112,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
     required String password,
     required String name,
     String? phone,
+    // Campos adicionais do jogador
+    DateTime? birthDate,
+    String? primaryPosition,
+    String? secondaryPosition,
+    String? preferredFoot,
   }) async {
     state = state.copyWith(isLoading: true, error: null);
 
@@ -125,6 +126,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
         password: password,
         name: name,
         phone: phone,
+        // Campos adicionais do jogador
+        birthDate: birthDate,
+        primaryPosition: primaryPosition,
+        secondaryPosition: secondaryPosition,
+        preferredFoot: preferredFoot,
       );
 
       if (user != null) {
@@ -319,6 +325,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
       return false;
     }
+  }
+
+  /// Atualizar usuário
+  void updateUser(User user) {
+    state = state.copyWith(user: user);
   }
 
   /// Limpar erro

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/auth_provider.dart';
 import '../utils/phone_formatter.dart';
+import '../constants/football_positions.dart';
 import 'user_dashboard_screen.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
@@ -23,6 +24,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   bool _obscureConfirmPassword = true;
   bool _acceptTerms = false;
 
+  // Campos adicionais para o jogador
+  DateTime? _birthDate;
+  String? _primaryPosition;
+  String? _secondaryPosition;
+  String? _preferredFoot;
+
   @override
   void dispose() {
     _nameController.dispose();
@@ -31,6 +38,22 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
+  }
+
+  Future<void> _selectBirthDate() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _birthDate ?? DateTime(2000),
+      firstDate: DateTime(1900),
+      lastDate: DateTime.now(),
+      locale: const Locale('pt', 'BR'),
+    );
+
+    if (picked != null && picked != _birthDate) {
+      setState(() {
+        _birthDate = picked;
+      });
+    }
   }
 
   Future<void> _handleRegister() async {
@@ -54,6 +77,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               ? _phoneController.text
                   .replaceAll(RegExp(r'\D'), '') // Remove formatação
               : null,
+          // Campos adicionais do jogador
+          birthDate: _birthDate,
+          primaryPosition: _primaryPosition,
+          secondaryPosition: _secondaryPosition,
+          preferredFoot: _preferredFoot,
         );
 
     if (success && mounted) {
@@ -211,6 +239,114 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                               }
                             }
                             return null;
+                          },
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        // Seção de dados do jogador
+                        const Divider(),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Dados do Jogador',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green[700],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Campo de data de nascimento
+                        InkWell(
+                          onTap: _selectBirthDate,
+                          child: InputDecorator(
+                            decoration: const InputDecoration(
+                              labelText: 'Data de nascimento (opcional)',
+                              prefixIcon: Icon(Icons.calendar_today_outlined),
+                              border: OutlineInputBorder(),
+                            ),
+                            child: Text(
+                              _birthDate != null
+                                  ? '${_birthDate!.day.toString().padLeft(2, '0')}/${_birthDate!.month.toString().padLeft(2, '0')}/${_birthDate!.year}'
+                                  : 'Selecione sua data de nascimento',
+                              style: TextStyle(
+                                color: _birthDate != null
+                                    ? Colors.black
+                                    : Colors.grey[600],
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        // Campo de posição principal
+                        DropdownButtonFormField<String>(
+                          initialValue: _primaryPosition,
+                          decoration: const InputDecoration(
+                            labelText: 'Posição principal (opcional)',
+                            prefixIcon: Icon(Icons.sports_soccer_outlined),
+                            border: OutlineInputBorder(),
+                          ),
+                          items: FootballPositions.positions.map((position) {
+                            return DropdownMenuItem(
+                              value: position,
+                              child: Text(position),
+                            );
+                          }).toList(),
+                          onChanged: (value) {
+                            setState(() {
+                              _primaryPosition = value;
+                            });
+                          },
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        // Campo de posição secundária
+                        DropdownButtonFormField<String>(
+                          initialValue: _secondaryPosition,
+                          decoration: const InputDecoration(
+                            labelText: 'Posição secundária (opcional)',
+                            prefixIcon: Icon(Icons.sports_soccer_outlined),
+                            border: OutlineInputBorder(),
+                          ),
+                          items: FootballPositions.secondaryPositions
+                              .map((position) {
+                            return DropdownMenuItem(
+                              value: position,
+                              child: Text(position),
+                            );
+                          }).toList(),
+                          onChanged: (value) {
+                            setState(() {
+                              _secondaryPosition =
+                                  value == 'Nenhuma' ? null : value;
+                            });
+                          },
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        // Campo de pé preferido
+                        DropdownButtonFormField<String>(
+                          initialValue: _preferredFoot,
+                          decoration: const InputDecoration(
+                            labelText: 'Pé preferido (opcional)',
+                            prefixIcon: Icon(Icons.directions_run_outlined),
+                            border: OutlineInputBorder(),
+                          ),
+                          items: FootballPositions.preferredFeet.map((foot) {
+                            return DropdownMenuItem(
+                              value: foot,
+                              child: Text(foot),
+                            );
+                          }).toList(),
+                          onChanged: (value) {
+                            setState(() {
+                              _preferredFoot = value;
+                            });
                           },
                         ),
 

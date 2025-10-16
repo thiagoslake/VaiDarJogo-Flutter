@@ -33,12 +33,68 @@ class SessionManagementService {
     }
   }
 
+  /// Remove apenas as sessões futuras de um jogo (mantém o histórico)
+  static Future<int> removeFutureGameSessions(String gameId) async {
+    try {
+      print('🗑️ Removendo sessões futuras do jogo $gameId...');
+
+      // Obter data atual para filtrar apenas sessões futuras
+      final today = DateTime.now();
+      final todayString = _formatDate(today);
+
+      print('🔍 Data atual para filtro: $todayString');
+
+      // Primeiro, contar quantas sessões futuras serão removidas
+      final countResponse = await SupabaseConfig.client
+          .from('game_sessions')
+          .select('id, session_date')
+          .eq('game_id', gameId)
+          .gte('session_date', todayString);
+
+      final sessionCount = countResponse.length;
+
+      if (sessionCount == 0) {
+        print('ℹ️ Nenhuma sessão futura encontrada para remover');
+        return 0;
+      }
+
+      // Log das sessões que serão removidas
+      for (var session in countResponse) {
+        print('   📅 Sessão futura a ser removida: ${session['session_date']}');
+      }
+
+      // Remover apenas as sessões futuras
+      await SupabaseConfig.client
+          .from('game_sessions')
+          .delete()
+          .eq('game_id', gameId)
+          .gte('session_date', todayString);
+
+      print('✅ Removidas $sessionCount sessões futuras do jogo $gameId');
+      print('📚 Histórico de sessões passadas foi preservado');
+      return sessionCount;
+    } catch (e) {
+      print('❌ Erro ao remover sessões futuras: $e');
+      rethrow;
+    }
+  }
+
   /// Cria novas sessões baseadas nas configurações do jogo
   static Future<List<Map<String, dynamic>>> createNewSessions(
       Map<String, dynamic> gameData) async {
     try {
       print(
           '📅 Criando novas sessões para jogo com frequência: ${gameData['frequency']}');
+
+      // Verificar se o jogo não está deletado
+      if (gameData['id'] != null) {
+        final gameStatus = await _getGameStatus(gameData['id']);
+        if (gameStatus == 'deleted') {
+          print('❌ Não é possível criar sessões para um jogo deletado');
+          throw Exception(
+              'Não é possível criar sessões para um jogo que foi deletado');
+        }
+      }
 
       final String frequency = gameData['frequency'] ?? 'Jogo Avulso';
 
@@ -64,7 +120,7 @@ class SessionManagementService {
         'session_date': gameData['game_date'] ?? _formatDate(DateTime.now()),
         'start_time': gameData['start_time'],
         'end_time': gameData['end_time'],
-        'status': 'scheduled'
+        'status': 'active'
       };
 
       final response = await SupabaseConfig.client
@@ -86,39 +142,117 @@ class SessionManagementService {
       final dayOfWeek = _getDayOfWeekNumber(gameData['day_of_week']);
       final frequency = gameData['frequency'];
 
-      // Calcular a próxima data válida baseada na data atual e no dia da semana
-      final currentDate = _calculateNextValidDate(dayOfWeek);
+      // Calcular a próxima data válida baseada na data de criação do jogo e no dia da semana
+      final gameCreationDate = gameData['created_at'] != null
+          ? DateTime.parse(gameData['created_at'])
+          : null;
+      final currentDate = _calculateNextValidDate(dayOfWeek,
+          gameCreationDate: gameCreationDate);
 
       print(
           '📅 Próxima data válida calculada: ${_formatDate(currentDate)} (${_getDayName(dayOfWeek)})');
 
       final sessions = <Map<String, dynamic>>[];
-      final maxSessions = _getMaxSessionsForFrequency(frequency);
+
+      // Verificar se há data final definida
+      DateTime? endDate;
+      if (gameData['end_date'] != null) {
+        endDate = DateTime.parse(gameData['end_date']);
+        print('📅 Data limite definida: ${_formatDate(endDate)}');
+
+        // Validar se a data limite não é anterior à data atual
+        if (endDate.isBefore(currentDate)) {
+          print(
+              '⚠️ Data limite ${_formatDate(endDate)} é anterior à data de início ${_formatDate(currentDate)}');
+          // Ajustar a data limite para ser pelo menos a data atual
+          endDate = currentDate;
+          print('📅 Data limite ajustada para: ${_formatDate(endDate)}');
+        }
+
+        // Validar se a data limite é muito próxima da data atual
+        final daysDifference = endDate.difference(currentDate).inDays;
+        if (daysDifference < 1) {
+          print(
+              '⚠️ Data limite muito próxima da data atual - apenas 1 sessão será criada');
+        }
+      } else {
+        print('⚠️ Nenhuma data limite definida - usando valores padrão');
+      }
+
+      final maxSessions = _getMaxSessionsForFrequency(frequency,
+          endDate: endDate, startDate: currentDate);
+
+      print('📊 Máximo de sessões calculado: $maxSessions');
 
       // Criar sessões baseadas na frequência
       DateTime sessionDate = currentDate;
+      int sessionsCreated = 0;
+
       for (int i = 0; i < maxSessions; i++) {
+        // Parar se a data da sessão ultrapassar a data final
+        if (endDate != null && sessionDate.isAfter(endDate)) {
+          print(
+              '🛑 Parando criação de sessões: data ${_formatDate(sessionDate)} ultrapassa data limite ${_formatDate(endDate)}');
+          break;
+        }
+
+        // Log quando chegamos à data final
+        if (endDate != null &&
+            sessionDate.year == endDate.year &&
+            sessionDate.month == endDate.month &&
+            sessionDate.day == endDate.day) {
+          print(
+              '📅 Última sessão criada para a data limite: ${_formatDate(sessionDate)}');
+        }
+
         sessions.add({
           'game_id': gameData['id'],
           'session_date': _formatDate(sessionDate),
           'start_time': gameData['start_time'],
           'end_time': gameData['end_time'],
-          'status': 'scheduled'
+          'status': 'active'
         });
+
+        sessionsCreated++;
+        print(
+            '📅 Sessão $sessionsCreated criada para: ${_formatDate(sessionDate)}');
 
         // Calcular próxima data baseada na frequência
         sessionDate = _calculateNextDate(sessionDate, frequency);
+
+        // Verificar se a próxima data ultrapassaria a data limite
+        if (endDate != null && sessionDate.isAfter(endDate)) {
+          print(
+              '🛑 Próxima data ${_formatDate(sessionDate)} ultrapassaria data limite ${_formatDate(endDate)} - parando criação');
+          break;
+        }
       }
 
-      // Inserir todas as sessões de uma vez
-      final response = await SupabaseConfig.client
-          .from('game_sessions')
-          .insert(sessions)
-          .select();
+      // Validar se pelo menos uma sessão foi criada
+      if (sessionsCreated == 0) {
+        print(
+            '⚠️ Nenhuma sessão foi criada - verifique as configurações de data e frequência');
+      }
 
       print(
-          '✅ ${response.length} sessões recorrentes criadas para o jogo ${gameData['id']}');
-      return response;
+          '📊 Total de sessões criadas: $sessionsCreated de $maxSessions calculadas');
+
+      // Inserir todas as sessões de uma vez
+      if (sessions.isNotEmpty) {
+        final response = await SupabaseConfig.client
+            .from('game_sessions')
+            .insert(sessions)
+            .select();
+
+        print(
+            '✅ ${response.length} sessões recorrentes criadas para o jogo ${gameData['id']}');
+        return response;
+      } else {
+        print(
+            '⚠️ Nenhuma sessão foi criada - verifique as configurações de data');
+        // Retornar uma lista vazia em vez de lançar erro
+        return [];
+      }
     } catch (e) {
       print('❌ Erro ao criar sessões recorrentes: $e');
       rethrow;
@@ -130,6 +264,19 @@ class SessionManagementService {
       String gameId, Map<String, dynamic> gameData) async {
     try {
       print('🔄 Iniciando recriação de sessões para o jogo $gameId...');
+
+      // Verificar se o jogo não está deletado
+      final gameStatus = await _getGameStatus(gameId);
+      if (gameStatus == 'deleted') {
+        print('❌ Não é possível recriar sessões para um jogo deletado');
+        return {
+          'game_id': gameId,
+          'success': false,
+          'error': 'Jogo deletado',
+          'message':
+              'Não é possível recriar sessões para um jogo que foi deletado'
+        };
+      }
 
       // Remover todas as sessões existentes
       final removedCount = await removeAllGameSessions(gameId);
@@ -160,7 +307,30 @@ class SessionManagementService {
   }
 
   /// Retorna o número máximo de sessões baseado na frequência
-  static int _getMaxSessionsForFrequency(String frequency) {
+  static int _getMaxSessionsForFrequency(String frequency,
+      {DateTime? endDate, DateTime? startDate}) {
+    // Se há data final, calcular baseado na diferença de datas
+    if (endDate != null && startDate != null) {
+      final daysDifference = endDate.difference(startDate).inDays;
+      print(
+          '📊 Diferença de dias entre ${_formatDate(startDate)} e ${_formatDate(endDate)}: $daysDifference dias');
+
+      switch (frequency) {
+        case 'Diária':
+          return daysDifference + 1; // Incluir o dia final
+        case 'Semanal':
+          return (daysDifference / 7).ceil() + 1; // Incluir a semana final
+        case 'Mensal':
+          return (daysDifference / 30).ceil() + 1; // Aproximação mensal
+        case 'Anual':
+          return (daysDifference / 365).ceil() + 1; // Aproximação anual
+        default:
+          return (daysDifference / 7).ceil() + 1; // Padrão semanal
+      }
+    }
+
+    // Fallback para valores padrão se não há data final
+    print('⚠️ Usando valores padrão para frequência: $frequency');
     switch (frequency) {
       case 'Diária':
         return 30; // 1 mês
@@ -183,8 +353,22 @@ class SessionManagementService {
       case 'Semanal':
         return currentDate.add(const Duration(days: 7));
       case 'Mensal':
-        return DateTime(
-            currentDate.year, currentDate.month + 1, currentDate.day);
+        // Lidar corretamente com meses de diferentes tamanhos
+        int nextMonth = currentDate.month + 1;
+        int nextYear = currentDate.year;
+        if (nextMonth > 12) {
+          nextMonth = 1;
+          nextYear++;
+        }
+
+        // Verificar se o dia existe no próximo mês
+        int day = currentDate.day;
+        int daysInNextMonth = DateTime(nextYear, nextMonth + 1, 0).day;
+        if (day > daysInNextMonth) {
+          day = daysInNextMonth;
+        }
+
+        return DateTime(nextYear, nextMonth, day);
       case 'Anual':
         return DateTime(
             currentDate.year + 1, currentDate.month, currentDate.day);
@@ -230,26 +414,38 @@ class SessionManagementService {
     }
   }
 
-  /// Calcula a próxima data válida baseada no dia da semana
-  /// Se hoje é 16/09/2025 (segunda-feira) e o jogo é às quintas-feiras,
-  /// retorna 18/09/2025 (quinta-feira)
-  static DateTime _calculateNextValidDate(int targetDayOfWeek) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
+  /// Calcula a próxima data válida baseada no dia da semana e data de criação do jogo
+  /// Se a data de criação é o dia correto, retorna a data de criação
+  /// Se não, retorna a próxima ocorrência após a data de criação
+  static DateTime _calculateNextValidDate(int targetDayOfWeek,
+      {DateTime? gameCreationDate}) {
+    // Usar a data de criação do jogo como referência, ou hoje se não fornecida
+    final referenceDate = gameCreationDate ?? DateTime.now();
+    final referenceDay =
+        DateTime(referenceDate.year, referenceDate.month, referenceDate.day);
 
-    // Se hoje já é o dia correto, usar a próxima ocorrência
-    int daysToAdd = targetDayOfWeek - today.weekday;
+    print('📅 Cálculo da próxima data válida:');
+    print(
+        '   Data de referência: ${_formatDate(referenceDay)} (${_getDayName(referenceDay.weekday)})');
+    print('   Dia alvo: ${_getDayName(targetDayOfWeek)}');
 
-    // Se o dia já passou esta semana, ir para a próxima semana
+    // Se a data de referência já é o dia correto, usar ela
+    if (referenceDay.weekday == targetDayOfWeek) {
+      print(
+          '   ✅ A data de referência é o dia correto! Usando como primeira sessão.');
+      return referenceDay;
+    }
+
+    // Se a data de referência não é o dia correto, calcular a próxima ocorrência
+    int daysToAdd = targetDayOfWeek - referenceDay.weekday;
+
+    // Se o dia já passou na semana da data de referência, ir para a próxima semana
     if (daysToAdd <= 0) {
       daysToAdd += 7;
     }
 
-    final nextValidDate = today.add(Duration(days: daysToAdd));
+    final nextValidDate = referenceDay.add(Duration(days: daysToAdd));
 
-    print('📅 Cálculo da próxima data válida:');
-    print('   Hoje: ${_formatDate(today)} (${_getDayName(today.weekday)})');
-    print('   Dia alvo: ${_getDayName(targetDayOfWeek)}');
     print(
         '   Próxima data: ${_formatDate(nextValidDate)} (${_getDayName(nextValidDate.weekday)})');
 
@@ -281,5 +477,21 @@ class SessionManagementService {
   /// Formata data para o formato YYYY-MM-DD
   static String _formatDate(DateTime date) {
     return '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
+  /// Obtém o status de um jogo
+  static Future<String?> _getGameStatus(String gameId) async {
+    try {
+      final response = await SupabaseConfig.client
+          .from('games')
+          .select('status')
+          .eq('id', gameId)
+          .maybeSingle();
+
+      return response?['status'] as String?;
+    } catch (e) {
+      print('❌ Erro ao obter status do jogo: $e');
+      return null;
+    }
   }
 }

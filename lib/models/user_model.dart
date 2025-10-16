@@ -6,6 +6,7 @@ class User {
   final DateTime createdAt;
   final DateTime? lastLoginAt;
   final bool isActive;
+  final String? profileImageUrl;
 
   User({
     required this.id,
@@ -15,9 +16,11 @@ class User {
     required this.createdAt,
     this.lastLoginAt,
     this.isActive = true,
+    this.profileImageUrl,
   });
 
   factory User.fromMap(Map<String, dynamic> map) {
+    print('🔍 DEBUG - User.fromMap - Telefone recebido: ${map['phone']}');
     return User(
       id: map['id'].toString(),
       email: map['email'] ?? '',
@@ -28,6 +31,7 @@ class User {
           ? DateTime.parse(map['last_login_at'])
           : null,
       isActive: map['is_active'] ?? true,
+      profileImageUrl: map['profile_image_url'],
     );
   }
 
@@ -40,6 +44,7 @@ class User {
       'created_at': createdAt.toIso8601String(),
       'last_login_at': lastLoginAt?.toIso8601String(),
       'is_active': isActive,
+      'profile_image_url': profileImageUrl,
     };
   }
 
@@ -51,6 +56,7 @@ class User {
     DateTime? createdAt,
     DateTime? lastLoginAt,
     bool? isActive,
+    String? profileImageUrl,
   }) {
     return User(
       id: id ?? this.id,
@@ -60,6 +66,7 @@ class User {
       createdAt: createdAt ?? this.createdAt,
       lastLoginAt: lastLoginAt ?? this.lastLoginAt,
       isActive: isActive ?? this.isActive,
+      profileImageUrl: profileImageUrl ?? this.profileImageUrl,
     );
   }
 
@@ -74,7 +81,7 @@ class User {
 
   @override
   String toString() {
-    return 'User(id: $id, email: $email, name: $name)';
+    return 'User(id: $id, email: $email, name: $name, profileImageUrl: $profileImageUrl)';
   }
 }
 

@@ -68,7 +68,8 @@ class _AdminRequestsScreenState extends ConsumerState<AdminRequestsScreen> {
               is_active
             )
           ''')
-          .eq('games.user_id', currentUser.id)
+          .eq('games.user_id',
+              currentUser.id) // Manter compatibilidade com criador
           .order('requested_at', ascending: false);
 
       // Buscar dados dos jogadores separadamente para cada solicitação
@@ -149,6 +150,9 @@ class _AdminRequestsScreenState extends ConsumerState<AdminRequestsScreen> {
             ),
           );
           _loadRequests(); // Recarregar lista
+
+          // Retornar para a tela anterior com indicação de mudança
+          Navigator.of(context).pop(true);
         }
       } catch (e) {
         if (mounted) {
@@ -186,6 +190,9 @@ class _AdminRequestsScreenState extends ConsumerState<AdminRequestsScreen> {
             ),
           );
           _loadRequests(); // Recarregar lista
+
+          // Retornar para a tela anterior com indicação de mudança
+          Navigator.of(context).pop(true);
         }
       } catch (e) {
         if (mounted) {
@@ -542,7 +549,7 @@ class _AdminRequestsScreenState extends ConsumerState<AdminRequestsScreen> {
                     _buildPlayerInfoRow('🎯 Tipo',
                         player['type'] == 'monthly' ? 'Mensalista' : 'Avulso'),
                     _buildPlayerInfoRow('🎂 Data de Nascimento',
-                        _formatDate(player['birth_date'])),
+                        _formatBirthDateWithAge(player['birth_date'])),
                     _buildPlayerInfoRow('⚽ Posição Principal',
                         player['primary_position'] ?? 'N/A'),
                     _buildPlayerInfoRow('🔄 Posição Secundária',
@@ -722,6 +729,36 @@ class _AdminRequestsScreenState extends ConsumerState<AdminRequestsScreen> {
     }
   }
 
+  int _calculateAge(String? birthDate) {
+    if (birthDate == null) return 0;
+    try {
+      final parsed = DateTime.parse(birthDate);
+      final now = DateTime.now();
+      int age = now.year - parsed.year;
+
+      // Verificar se o aniversário ainda não aconteceu este ano
+      if (now.month < parsed.month ||
+          (now.month == parsed.month && now.day < parsed.day)) {
+        age--;
+      }
+
+      return age;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  String _formatBirthDateWithAge(String? birthDate) {
+    if (birthDate == null) return 'N/A';
+    try {
+      final age = _calculateAge(birthDate);
+      final formattedDate = _formatDate(birthDate);
+      return '$formattedDate ($age anos)';
+    } catch (e) {
+      return birthDate;
+    }
+  }
+
   String _formatDateTime(String? dateTime) {
     if (dateTime == null) return 'N/A';
     try {
@@ -846,25 +883,23 @@ class _ApprovalDialogState extends State<_ApprovalDialog> {
               ),
             ),
             const SizedBox(height: 8),
-            RadioListTile<String>(
-              title: const Text('🎲 Avulso'),
-              subtitle: const Text('Jogador eventual'),
-              value: 'casual',
-              groupValue: _selectedPlayerType,
-              onChanged: (value) {
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment<String>(
+                  value: 'casual',
+                  label: Text('🎲 Avulso'),
+                  tooltip: 'Jogador eventual',
+                ),
+                ButtonSegment<String>(
+                  value: 'monthly',
+                  label: Text('📅 Mensalista'),
+                  tooltip: 'Jogador fixo mensal',
+                ),
+              ],
+              selected: {_selectedPlayerType},
+              onSelectionChanged: (Set<String> selection) {
                 setState(() {
-                  _selectedPlayerType = value!;
-                });
-              },
-            ),
-            RadioListTile<String>(
-              title: const Text('📅 Mensalista'),
-              subtitle: const Text('Jogador fixo mensal'),
-              value: 'monthly',
-              groupValue: _selectedPlayerType,
-              onChanged: (value) {
-                setState(() {
-                  _selectedPlayerType = value!;
+                  _selectedPlayerType = selection.first;
                 });
               },
             ),

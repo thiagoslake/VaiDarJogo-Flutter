@@ -7,6 +7,7 @@ class SafeLocationField extends StatefulWidget {
   final String labelText;
   final String hintText;
   final String? initialValue;
+  final String? initialAddress;
   final Function(String location, String? address, double? lat, double? lng)
       onLocationSelected;
   final String? Function(String?)? validator;
@@ -16,6 +17,7 @@ class SafeLocationField extends StatefulWidget {
     required this.labelText,
     required this.hintText,
     this.initialValue,
+    this.initialAddress,
     required this.onLocationSelected,
     this.validator,
   });
@@ -36,6 +38,9 @@ class _SafeLocationFieldState extends State<SafeLocationField> {
     super.initState();
     if (widget.initialValue != null) {
       _locationController.text = widget.initialValue!;
+    }
+    if (widget.initialAddress != null) {
+      _addressController.text = widget.initialAddress!;
     }
   }
 
@@ -245,6 +250,13 @@ class _SafeLocationFieldState extends State<SafeLocationField> {
                 : const Icon(Icons.search),
           ),
           validator: widget.validator,
+          textInputAction: TextInputAction.search,
+          keyboardType: TextInputType.text,
+          enableSuggestions: true,
+          autocorrect: true,
+          textCapitalization: TextCapitalization.words,
+          maxLines: 1,
+          inputFormatters: const [], // Remover qualquer formatação que possa bloquear acentuação
           onChanged: (value) {
             _searchPlaces(value);
           },
@@ -367,9 +379,3 @@ class _SafeLocationFieldState extends State<SafeLocationField> {
     );
   }
 }
-
-
-
-
-
-

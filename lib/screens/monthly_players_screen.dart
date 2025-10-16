@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/supabase_config.dart';
 import '../providers/selected_game_provider.dart';
+import '../services/player_service.dart';
 
 class MonthlyPlayersScreen extends ConsumerStatefulWidget {
   const MonthlyPlayersScreen({super.key});
@@ -40,36 +41,30 @@ class _MonthlyPlayersScreenState extends ConsumerState<MonthlyPlayersScreen> {
       }
 
       // Buscar jogadores mensalistas do jogo selecionado
-      final response = await SupabaseConfig.client
-          .from('game_players')
-          .select('''
-            players:player_id (
-              id,
-              name,
-              phone_number,
-              type,
-              birth_date,
-              primary_position,
-              secondary_position,
-              preferred_foot,
-              status,
-              created_at
-            )
-          ''')
-          .eq('game_id', selectedGame.id)
-          .eq('status', 'active')
-          .eq('players.type', 'monthly')
-          .eq('players.status', 'active')
-          .order('players(name)', ascending: true);
+      final gamePlayers = await PlayerService.getGamePlayersByType(
+        gameId: selectedGame.id,
+        playerType: 'monthly',
+      );
 
-      // Extrair os dados dos jogadores da resposta
-      final players = response
-          .map<Map<String, dynamic>>((item) {
-            final playerData = item['players'] as Map<String, dynamic>?;
-            return playerData ?? {};
-          })
-          .where((player) => player.isNotEmpty)
-          .toList();
+      // Buscar dados dos jogadores
+      final response = await SupabaseConfig.client
+          .from('players')
+          .select('''
+            id,
+            name,
+            phone_number,
+            birth_date,
+            primary_position,
+            secondary_position,
+            preferred_foot,
+            status,
+            created_at
+          ''')
+          .inFilter('id', gamePlayers.map((gp) => gp.playerId).toList())
+          .order('name', ascending: true);
+
+      // Os dados dos jogadores já estão na resposta
+      final players = response;
 
       setState(() {
         _players = players;
@@ -320,7 +315,8 @@ class _MonthlyPlayersScreenState extends ConsumerState<MonthlyPlayersScreen> {
             _buildInfoRow('📱 Telefone', _formatPhone(player['phone_number'])),
 
             if (player['birth_date'] != null)
-              _buildInfoRow('🎂 Nascimento', _formatDate(player['birth_date'])),
+              _buildInfoRow('🎂 Nascimento',
+                  _formatBirthDateWithAge(player['birth_date'])),
 
             if (player['primary_position'] != null)
               _buildInfoRow('⚽ Posição Principal', player['primary_position']),
@@ -383,6 +379,36 @@ class _MonthlyPlayersScreenState extends ConsumerState<MonthlyPlayersScreen> {
       return '${parsed.day.toString().padLeft(2, '0')}/${parsed.month.toString().padLeft(2, '0')}/${parsed.year}';
     } catch (e) {
       return date;
+    }
+  }
+
+  int _calculateAge(String? birthDate) {
+    if (birthDate == null) return 0;
+    try {
+      final parsed = DateTime.parse(birthDate);
+      final now = DateTime.now();
+      int age = now.year - parsed.year;
+
+      // Verificar se o aniversário ainda não aconteceu este ano
+      if (now.month < parsed.month ||
+          (now.month == parsed.month && now.day < parsed.day)) {
+        age--;
+      }
+
+      return age;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  String _formatBirthDateWithAge(String? birthDate) {
+    if (birthDate == null) return 'N/A';
+    try {
+      final age = _calculateAge(birthDate);
+      final formattedDate = _formatDate(birthDate);
+      return '$formattedDate ($age anos)';
+    } catch (e) {
+      return birthDate;
     }
   }
 }

@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'game_configuration_screen.dart';
 import 'player_registration_screen.dart';
 import 'create_game_screen.dart';
+import 'admin_panel_screen.dart';
 import '../providers/selected_game_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/game_status_provider.dart';
+import '../config/supabase_config.dart';
 import 'login_screen.dart';
 import 'user_profile_screen.dart';
 
@@ -17,13 +19,53 @@ class MainMenuScreen extends ConsumerStatefulWidget {
 }
 
 class _MainMenuScreenState extends ConsumerState<MainMenuScreen> {
+  bool _isAdmin = false;
+
   @override
   void initState() {
     super.initState();
+    _checkAdminStatus();
     // Tentar selecionar automaticamente o jogo ativo mais recente
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _selectActiveGame();
     });
+  }
+
+  Future<void> _checkAdminStatus() async {
+    final currentUser = ref.read(currentUserProvider);
+    if (currentUser != null) {
+      try {
+        // Buscar o player_id do usuário atual
+        final playerResponse = await SupabaseConfig.client
+            .from('players')
+            .select('id')
+            .eq('user_id', currentUser.id)
+            .maybeSingle();
+
+        if (playerResponse != null) {
+          // Verificar se é administrador em algum jogo
+          final adminGames = await SupabaseConfig.client
+              .from('game_players')
+              .select('id')
+              .eq('player_id', playerResponse['id'])
+              .eq('is_admin', true)
+              .eq('status', 'active')
+              .limit(1);
+
+          setState(() {
+            _isAdmin = adminGames.isNotEmpty;
+          });
+        } else {
+          setState(() {
+            _isAdmin = false;
+          });
+        }
+      } catch (e) {
+        setState(() {
+          _isAdmin = false;
+        });
+      }
+    }
   }
 
   Future<void> _selectActiveGame() async {
@@ -74,7 +116,7 @@ class _MainMenuScreenState extends ConsumerState<MainMenuScreen> {
       ref.invalidate(gamesListProvider);
       ref.invalidate(activeGamesProvider);
       ref.invalidate(activeGameProvider);
-      ref.invalidate(gameStatusProvider_future(game.id));
+      ref.invalidate(gameStatusProviderFuture(game.id));
       ref.invalidate(isGameActiveProvider(game.id));
       ref.invalidate(gameInfoProvider(game.id));
 
@@ -355,22 +397,34 @@ class _MainMenuScreenState extends ConsumerState<MainMenuScreen> {
           if (currentUser != null)
             PopupMenuButton<String>(
               icon: CircleAvatar(
+                radius: 20,
                 backgroundColor: Colors.green,
-                child: Text(
-                  currentUser.name.isNotEmpty
-                      ? currentUser.name[0].toUpperCase()
-                      : 'U',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                backgroundImage: currentUser.profileImageUrl != null
+                    ? NetworkImage(currentUser.profileImageUrl!)
+                    : null,
+                child: currentUser.profileImageUrl == null
+                    ? Text(
+                        currentUser.name.isNotEmpty
+                            ? currentUser.name[0].toUpperCase()
+                            : 'U',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      )
+                    : null,
               ),
               onSelected: (value) async {
                 if (value == 'profile') {
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (context) => const UserProfileScreen(),
+                    ),
+                  );
+                } else if (value == 'admin_games') {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const AdminPanelScreen(),
                     ),
                   );
                 } else if (value == 'logout') {
@@ -418,6 +472,17 @@ class _MainMenuScreenState extends ConsumerState<MainMenuScreen> {
                     ],
                   ),
                 ),
+                if (_isAdmin)
+                  const PopupMenuItem(
+                    value: 'admin_games',
+                    child: Row(
+                      children: [
+                        Icon(Icons.admin_panel_settings, color: Colors.purple),
+                        SizedBox(width: 8),
+                        Text('Jogos que Administro'),
+                      ],
+                    ),
+                  ),
                 const PopupMenuItem(
                   value: 'logout',
                   child: Row(
@@ -435,36 +500,40 @@ class _MainMenuScreenState extends ConsumerState<MainMenuScreen> {
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             // Cabeçalho
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: Column(
-                  children: [
-                    const Icon(
-                      Icons.sports_soccer,
-                      size: 64,
-                      color: Colors.green,
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'VaiDarJogo App',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
+            SizedBox(
+              width: double.infinity,
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    children: [
+                      const Icon(
+                        Icons.sports_soccer,
+                        size: 64,
+                        color: Colors.green,
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Gerencie seus jogos de futebol',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.grey[600],
+                      const SizedBox(height: 16),
+                      const Text(
+                        'VaiDarJogo App',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 8),
+                      Text(
+                        'Gerencie seus jogos de futebol',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -472,52 +541,57 @@ class _MainMenuScreenState extends ConsumerState<MainMenuScreen> {
             const SizedBox(height: 16),
 
             // Seleção de Jogo
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      '🎮 Selecionar Jogo',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    gamesAsync.when(
-                      data: (games) => _buildGameSelector(games, selectedGame),
-                      loading: () => const Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(20.0),
-                          child: CircularProgressIndicator(),
+            SizedBox(
+              width: double.infinity,
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '🎮 Selecionar Jogo',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                      error: (error, stack) => Card(
-                        color: Colors.red.shade50,
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            children: [
-                              Icon(Icons.error, color: Colors.red.shade600),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Erro ao carregar jogos: $error',
-                                style: TextStyle(color: Colors.red.shade600),
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 8),
-                              ElevatedButton(
-                                onPressed: () => ref.refresh(gamesListProvider),
-                                child: const Text('Tentar Novamente'),
-                              ),
-                            ],
+                      const SizedBox(height: 12),
+                      gamesAsync.when(
+                        data: (games) =>
+                            _buildGameSelector(games, selectedGame),
+                        loading: () => const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(20.0),
+                            child: CircularProgressIndicator(),
+                          ),
+                        ),
+                        error: (error, stack) => Card(
+                          color: Colors.red.shade50,
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Column(
+                              children: [
+                                Icon(Icons.error, color: Colors.red.shade600),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Erro ao carregar jogos: $error',
+                                  style: TextStyle(color: Colors.red.shade600),
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 8),
+                                ElevatedButton(
+                                  onPressed: () =>
+                                      ref.refresh(gamesListProvider),
+                                  child: const Text('Tentar Novamente'),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -660,29 +734,36 @@ class _MainMenuScreenState extends ConsumerState<MainMenuScreen> {
 
     return Column(
       children: [
-        DropdownButtonFormField<Game>(
-          initialValue: selectedGame,
-          decoration: const InputDecoration(
-            labelText: 'Escolha o jogo',
-            border: OutlineInputBorder(),
-            prefixIcon: Icon(Icons.sports_soccer),
+        SizedBox(
+          width: double.infinity,
+          child: DropdownButtonFormField<Game>(
+            isExpanded: true,
+            initialValue: selectedGame,
+            decoration: const InputDecoration(
+              labelText: 'Escolha o jogo',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.sports_soccer),
+            ),
+            items: games.map((Game game) {
+              return DropdownMenuItem<Game>(
+                value: game,
+                child: SizedBox(
+                  width: double.infinity,
+                  child: Text(
+                    '${game.organizationName} - ${game.location}',
+                    style: const TextStyle(fontSize: 14),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              );
+            }).toList(),
+            onChanged: (Game? newGame) {
+              if (newGame != null) {
+                ref.read(selectedGameProvider.notifier).state = newGame;
+              }
+            },
           ),
-          items: games.map((Game game) {
-            return DropdownMenuItem<Game>(
-              value: game,
-              child: Text(
-                '${game.organizationName} - ${game.location}',
-                style: const TextStyle(fontSize: 14),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            );
-          }).toList(),
-          onChanged: (Game? newGame) {
-            if (newGame != null) {
-              ref.read(selectedGameProvider.notifier).state = newGame;
-            }
-          },
         ),
         const SizedBox(height: 12),
         OutlinedButton.icon(
@@ -729,7 +810,7 @@ class _MainMenuScreenState extends ConsumerState<MainMenuScreen> {
                 Consumer(
                   builder: (context, ref, child) {
                     final gameStatusAsync =
-                        ref.watch(gameStatusProvider_future(game.id));
+                        ref.watch(gameStatusProviderFuture(game.id));
                     return gameStatusAsync.when(
                       data: (status) => Container(
                         padding: const EdgeInsets.symmetric(
@@ -804,7 +885,7 @@ class _MainMenuScreenState extends ConsumerState<MainMenuScreen> {
             Consumer(
               builder: (context, ref, child) {
                 final gameStatusAsync =
-                    ref.watch(gameStatusProvider_future(game.id));
+                    ref.watch(gameStatusProviderFuture(game.id));
                 return gameStatusAsync.when(
                   data: (status) => Row(
                     children: [
@@ -872,7 +953,7 @@ class _MainMenuScreenState extends ConsumerState<MainMenuScreen> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.1),
+                  color: color.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(

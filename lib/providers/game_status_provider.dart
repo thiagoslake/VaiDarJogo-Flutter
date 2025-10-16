@@ -47,7 +47,7 @@ final gameStatusProvider =
 });
 
 // Provider para obter o status atual de um jogo específico
-final gameStatusProvider_future =
+final gameStatusProviderFuture =
     FutureProvider.family<String, String>((ref, gameId) async {
   try {
     final response = await SupabaseConfig.client
@@ -65,7 +65,7 @@ final gameStatusProvider_future =
 // Provider para verificar se um jogo está ativo
 final isGameActiveProvider =
     FutureProvider.family<bool, String>((ref, gameId) async {
-  final status = await ref.watch(gameStatusProvider_future(gameId).future);
+  final status = await ref.watch(gameStatusProviderFuture(gameId).future);
   return status == 'active';
 });
 
@@ -76,12 +76,17 @@ final gameInfoProvider =
     final response = await SupabaseConfig.client
         .from('games')
         .select(
-            'id, user_id, organization_name, location, address, status, created_at, players_per_team, substitutes_per_team, number_of_teams, start_time, end_time, game_date, day_of_week, frequency, price_config')
+            'id, user_id, organization_name, location, address, status, created_at, players_per_team, substitutes_per_team, number_of_teams, start_time, end_time, game_date, day_of_week, frequency, end_date, price_config')
         .eq('id', gameId)
-        .single();
+        .maybeSingle();
+
+    if (response == null) {
+      return null;
+    }
 
     return Game.fromMap(response);
   } catch (e) {
+    print('❌ Erro ao buscar informações do jogo $gameId: $e');
     return null;
   }
 });

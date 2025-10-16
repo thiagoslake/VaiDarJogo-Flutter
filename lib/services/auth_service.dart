@@ -3,6 +3,7 @@ import '../models/user_model.dart';
 import '../config/supabase_config.dart';
 import '../utils/auth_error_handler.dart';
 import '../utils/friendly_auth_exception.dart';
+import '../utils/error_handler.dart';
 import 'player_service.dart';
 
 class AuthService {
@@ -144,9 +145,14 @@ class AuthService {
     required String password,
     required String name,
     String? phone,
+    // Campos adicionais do jogador
+    DateTime? birthDate,
+    String? primaryPosition,
+    String? secondaryPosition,
+    String? preferredFoot,
   }) async {
     try {
-      // Registrar no Supabase Auth
+      // Registrar no Supabase Auth com telefone nos metadados
       final response = await _client.auth.signUp(
         email: email,
         password: password,
@@ -156,8 +162,12 @@ class AuthService {
         },
       );
 
+      print('🔍 DEBUG - Usuário registrado no Auth: ${response.user?.email}');
+      print('🔍 DEBUG - Metadados enviados: name=$name, phone=$phone');
+      print('🔍 DEBUG - Telefone será salvo em users.phone via trigger');
+
       if (response.user != null) {
-        // Aguardar um pouco para o trigger processar
+        // Aguardar um pouco para o trigger processar (se existir)
         await Future.delayed(const Duration(seconds: 2));
 
         try {
@@ -168,10 +178,44 @@ class AuthService {
               .eq('id', response.user!.id)
               .single();
 
-          final user = User.fromMap(userData);
+          print('🔍 DEBUG - Usuário encontrado na tabela users: $userData');
+          print('🔍 DEBUG - Telefone na tabela users: ${userData['phone']}');
+
+          // Verificar se o telefone foi inserido pelo trigger
+          User user;
+          if (userData['phone'] == null || userData['phone'] == '') {
+            print(
+                '⚠️ Telefone não foi inserido pelo trigger, inserindo manualmente...');
+
+            // Atualizar o telefone na tabela users
+            await _client
+                .from('users')
+                .update({'phone': phone}).eq('id', response.user!.id);
+
+            print('✅ Telefone inserido manualmente na tabela users: $phone');
+
+            // Buscar novamente os dados atualizados
+            final updatedUserData = await _client
+                .from('users')
+                .select('*')
+                .eq('id', response.user!.id)
+                .single();
+
+            user = User.fromMap(updatedUserData);
+          } else {
+            print('✅ Telefone salvo em users.phone via trigger');
+            user = User.fromMap(userData);
+          }
 
           // Criar perfil de jogador automaticamente
-          await _createPlayerProfile(user, phone);
+          await _createPlayerProfile(
+            user,
+            phone,
+            birthDate: birthDate,
+            primaryPosition: primaryPosition,
+            secondaryPosition: secondaryPosition,
+            preferredFoot: preferredFoot,
+          );
 
           return user;
         } catch (e) {
@@ -188,12 +232,23 @@ class AuthService {
             'is_active': true,
           };
 
+          print('🔍 DEBUG - Criando usuário manualmente: $userData');
+          print('🔍 DEBUG - Telefone a ser inserido: $phone');
+          print('✅ Telefone será salvo em users.phone via inserção manual');
+
           await _client.from('users').insert(userData);
 
           final user = User.fromMap(userData);
 
           // Criar perfil de jogador automaticamente
-          await _createPlayerProfile(user, phone);
+          await _createPlayerProfile(
+            user,
+            phone,
+            birthDate: birthDate,
+            primaryPosition: primaryPosition,
+            secondaryPosition: secondaryPosition,
+            preferredFoot: preferredFoot,
+          );
 
           return user;
         }
@@ -226,11 +281,31 @@ class AuthService {
             .eq('id', session!.user.id)
             .single();
 
+        print('🔍 DEBUG - Dados do usuário carregados: $userData');
+        print('🔍 DEBUG - Telefone do usuário: ${userData['phone']}');
+
         return User.fromMap(userData);
       }
       return null;
     } catch (e) {
       print('❌ Erro ao obter usuário atual: $e');
+      // Se não conseguir buscar da tabela users, tentar criar um usuário básico
+      try {
+        final session = _client.auth.currentSession;
+        if (session?.user != null) {
+          final basicUser = User(
+            id: session!.user.id,
+            email: session.user.email ?? '',
+            name: session.user.userMetadata?['name'] ?? 'Usuário',
+            phone: session.user.userMetadata?['phone'],
+            createdAt: DateTime.now(),
+            isActive: true,
+          );
+          return basicUser;
+        }
+      } catch (fallbackError) {
+        print('❌ Erro no fallback do usuário: $fallbackError');
+      }
       return null;
     }
   }
@@ -262,17 +337,58 @@ class AuthService {
     String? phone,
   }) async {
     try {
+      print('🔍 DEBUG - Iniciando atualização de perfil para userId: $userId');
+      print('🔍 DEBUG - Dados a atualizar: name=$name, phone=$phone');
+
       final updateData = <String, dynamic>{};
       if (name != null) updateData['name'] = name;
       if (phone != null) updateData['phone'] = phone;
 
       if (updateData.isNotEmpty) {
+        // Atualizar dados na tabela users
         await _client.from('users').update(updateData).eq('id', userId);
+        print('✅ Dados atualizados na tabela users');
+
+        // Se telefone foi alterado, sincronizar com a tabela players
+        if (phone != null) {
+          print('🔍 DEBUG - Sincronizando telefone com tabela players');
+
+          try {
+            // Buscar o player associado ao usuário
+            final player = await PlayerService.getPlayerByUserId(userId);
+
+            if (player != null) {
+              // Verificar se o telefone já está sendo usado por outro jogador
+              final isPhoneInUse =
+                  await PlayerService.isPhoneNumberInUse(phone);
+
+              if (isPhoneInUse && player.phoneNumber != phone) {
+                print(
+                    '⚠️ Telefone $phone já está sendo usado por outro jogador');
+                print(
+                    'ℹ️ Mantendo telefone atual na tabela players para evitar conflito');
+              } else {
+                // Atualizar telefone na tabela players
+                await _client
+                    .from('players')
+                    .update({'phone_number': phone}).eq('user_id', userId);
+
+                print('✅ Telefone sincronizado na tabela players: $phone');
+              }
+            } else {
+              print('ℹ️ Usuário não possui perfil de jogador ainda');
+            }
+          } catch (e) {
+            print('⚠️ Erro ao sincronizar telefone com players: $e');
+            // Não falhar a atualização do usuário por causa disso
+          }
+        }
 
         // Retornar usuário atualizado
         final userData =
             await _client.from('users').select('*').eq('id', userId).single();
 
+        print('✅ Perfil de usuário atualizado com sucesso');
         return User.fromMap(userData);
       }
       return null;
@@ -359,7 +475,7 @@ class AuthService {
       return true;
     } catch (e) {
       print('❌ Erro na abordagem alternativa: $e');
-      throw FriendlyAuthException(
+      throw const FriendlyAuthException(
           'Não foi possível atualizar o email. O email atual pode estar em um estado inválido no sistema.');
     }
   }
@@ -398,7 +514,14 @@ class AuthService {
   }
 
   /// Criar perfil de jogador automaticamente para novo usuário
-  static Future<void> _createPlayerProfile(User user, String? phone) async {
+  static Future<void> _createPlayerProfile(
+    User user,
+    String? phone, {
+    DateTime? birthDate,
+    String? primaryPosition,
+    String? secondaryPosition,
+    String? preferredFoot,
+  }) async {
     try {
       print('🎯 Criando perfil de jogador para usuário: ${user.name}');
 
@@ -409,18 +532,63 @@ class AuthService {
         return;
       }
 
+      // Definir telefone para usar - priorizar o telefone fornecido
+      String phoneToUse = phone ?? '00000000000';
+
+      // Se telefone foi fornecido, verificar se já está em uso
+      if (phone != null && phone.isNotEmpty && phone != '00000000000') {
+        final isPhoneInUse = await PlayerService.isPhoneNumberInUse(phone);
+        if (isPhoneInUse) {
+          print('⚠️ Telefone $phone já está sendo usado por outro jogador');
+          print('ℹ️ Usando telefone padrão para evitar conflito');
+          phoneToUse = '00000000000';
+        } else {
+          print('✅ Telefone $phone disponível para uso');
+        }
+      }
+
       // Criar perfil de jogador básico
       await PlayerService.createPlayer(
         userId: user.id,
         name: user.name,
-        phoneNumber: phone ?? '00000000000', // Telefone padrão se não fornecido
-        type: 'casual', // Tipo padrão
+        phoneNumber: phoneToUse,
+        birthDate: birthDate,
+        primaryPosition: primaryPosition,
+        secondaryPosition: secondaryPosition,
+        preferredFoot: preferredFoot,
       );
 
       print('✅ Perfil de jogador criado com sucesso para: ${user.name}');
+      print('✅ Telefone salvo na tabela players.phone_number: $phoneToUse');
+      print('🎯 INSERÇÃO DUPLA CONCLUÍDA: users.phone + players.phone_number');
+
+      if (phoneToUse == '00000000000' && phone != null && phone.isNotEmpty) {
+        print(
+            'ℹ️ Telefone $phone estava em uso, usando telefone padrão. Usuário pode atualizar depois.');
+      }
     } catch (e) {
       print('❌ Erro ao criar perfil de jogador: $e');
-      // Não rethrow para não interromper o processo de registro
+
+      // Se for erro de telefone duplicado, mostrar mensagem específica
+      if (ErrorHandler.isPhoneDuplicateError(e)) {
+        print(
+            '⚠️ Telefone duplicado detectado durante criação automática do perfil');
+        // Tentar criar com telefone padrão
+        try {
+          await PlayerService.createPlayer(
+            userId: user.id,
+            name: user.name,
+            phoneNumber: '00000000000',
+          );
+          print('✅ Perfil criado com telefone padrão após conflito');
+        } catch (retryError) {
+          print(
+              '❌ Falha ao criar perfil mesmo com telefone padrão: $retryError');
+        }
+      } else {
+        // Para outros erros, também não rethrow para não interromper o registro
+        print('⚠️ Outro erro na criação do perfil, continuando com o registro');
+      }
     }
   }
 }

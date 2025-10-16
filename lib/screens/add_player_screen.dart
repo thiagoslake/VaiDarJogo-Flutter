@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/supabase_config.dart';
 import '../providers/selected_game_provider.dart';
+import '../services/player_service.dart';
+import '../constants/football_positions.dart';
 
 class AddPlayerScreen extends ConsumerStatefulWidget {
   const AddPlayerScreen({super.key});
@@ -25,23 +27,13 @@ class _AddPlayerScreenState extends ConsumerState<AddPlayerScreen> {
 
   // Valores selecionados
   DateTime? _selectedBirthDate;
-  String _selectedPrimaryPosition = 'Meias';
+  String _selectedPrimaryPosition = 'Meio Direita';
   String _selectedSecondaryPosition = 'Nenhuma';
   String _selectedPreferredFoot = 'Direita';
 
-  final List<String> _positions = [
-    'Goleiro',
-    'Fixo',
-    'Alas',
-    'Meias',
-    'Pivô',
-  ];
-
-  final List<String> _feet = [
-    'Direita',
-    'Esquerda',
-    'Ambidestro',
-  ];
+  // Usar posições do Futebol 7
+  final List<String> _positions = FootballPositions.positions;
+  final List<String> _feet = FootballPositions.preferredFeet;
 
   @override
   void dispose() {
@@ -143,34 +135,25 @@ class _AddPlayerScreenState extends ConsumerState<AddPlayerScreen> {
           print('⚠️ Corrigindo preferred_foot de "Ambas" para "Ambidestro"');
         }
 
-        final playerData = <String, dynamic>{
-          'name': _nameController.text.trim(),
-          'phone_number': phoneNumber,
-          'type': _selectedPlayerType,
-          'status': 'active',
-          if (_selectedPlayerType == 'monthly') ...{
-            'birth_date': _selectedBirthDate?.toIso8601String().split('T')[0],
-            'primary_position': _selectedPrimaryPosition,
-            'secondary_position': _selectedSecondaryPosition == 'Nenhuma'
-                ? null
-                : _selectedSecondaryPosition,
-            'preferred_foot': validPreferredFoot,
-          },
-        };
+        // Criar perfil do jogador (sem tipo)
+        final player = await PlayerService.createPlayer(
+          userId: '', // Será preenchido depois se necessário
+          name: _nameController.text.trim(),
+          phoneNumber: phoneNumber,
+          birthDate: _selectedBirthDate,
+          primaryPosition: _selectedPrimaryPosition,
+          secondaryPosition: _selectedSecondaryPosition == 'Nenhuma'
+              ? null
+              : _selectedSecondaryPosition,
+          preferredFoot: validPreferredFoot,
+        );
 
-        print('📝 Criando jogador com dados: $playerData');
-        print(
-            '🔍 Debug - preferred_foot selecionado: "$_selectedPreferredFoot"');
+        if (player == null) {
+          throw Exception('Erro ao criar perfil do jogador');
+        }
 
-        final result = await SupabaseConfig.client
-            .from('players')
-            .insert(playerData)
-            .select()
-            .single();
-
-        playerId = result['id'];
+        playerId = player.id;
         print('✅ Jogador criado com sucesso: $playerId');
-        print('🔍 Debug - result: $result');
       }
 
       // Verificar se o jogador já está relacionado ao jogo
@@ -194,23 +177,26 @@ class _AddPlayerScreenState extends ConsumerState<AddPlayerScreen> {
               backgroundColor: Colors.orange,
             ),
           );
+
+          // Retornar true mesmo se já estiver cadastrado
+          Navigator.of(context).pop(true);
         }
       } else {
         // Criar relacionamento jogador-jogo
         print('🔗 Criando relacionamento jogador-jogo...');
-        final relationData = {
-          'game_id': selectedGame.id,
-          'player_id': playerId,
-          'status': 'active',
-        };
 
-        final relationResult = await SupabaseConfig.client
-            .from('game_players')
-            .insert(relationData)
-            .select()
-            .single();
+        // Adicionar jogador ao jogo com o tipo selecionado
+        final gamePlayer = await PlayerService.addPlayerToGame(
+          gameId: selectedGame.id,
+          playerId: playerId,
+          playerType: _selectedPlayerType,
+        );
 
-        print('✅ Relacionamento criado com sucesso: ${relationResult['id']}');
+        if (gamePlayer == null) {
+          throw Exception('Erro ao adicionar jogador ao jogo');
+        }
+
+        print('✅ Relacionamento criado com sucesso: ${gamePlayer.id}');
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -219,6 +205,9 @@ class _AddPlayerScreenState extends ConsumerState<AddPlayerScreen> {
               backgroundColor: Colors.green,
             ),
           );
+
+          // Retornar true para indicar sucesso
+          Navigator.of(context).pop(true);
         }
       }
 
@@ -286,35 +275,25 @@ class _AddPlayerScreenState extends ConsumerState<AddPlayerScreen> {
                               ),
                             ),
                             const SizedBox(height: 16),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: RadioListTile<String>(
-                                    title: const Text('📅 Mensalista'),
-                                    subtitle: const Text('Jogador fixo mensal'),
-                                    value: 'monthly',
-                                    groupValue: _selectedPlayerType,
-                                    onChanged: (value) {
-                                      setState(() {
-                                        _selectedPlayerType = value!;
-                                      });
-                                    },
-                                  ),
+                            SegmentedButton<String>(
+                              segments: const [
+                                ButtonSegment<String>(
+                                  value: 'monthly',
+                                  label: Text('📅 Mensalista'),
+                                  tooltip: 'Jogador fixo mensal',
                                 ),
-                                Expanded(
-                                  child: RadioListTile<String>(
-                                    title: const Text('🎲 Avulso'),
-                                    subtitle: const Text('Jogador eventual'),
-                                    value: 'casual',
-                                    groupValue: _selectedPlayerType,
-                                    onChanged: (value) {
-                                      setState(() {
-                                        _selectedPlayerType = value!;
-                                      });
-                                    },
-                                  ),
+                                ButtonSegment<String>(
+                                  value: 'casual',
+                                  label: Text('🎲 Avulso'),
+                                  tooltip: 'Jogador eventual',
                                 ),
                               ],
+                              selected: {_selectedPlayerType},
+                              onSelectionChanged: (Set<String> selection) {
+                                setState(() {
+                                  _selectedPlayerType = selection.first;
+                                });
+                              },
                             ),
                           ],
                         ),
@@ -454,7 +433,7 @@ class _AddPlayerScreenState extends ConsumerState<AddPlayerScreen> {
                                   border: OutlineInputBorder(),
                                   prefixIcon: Icon(Icons.sports_soccer),
                                 ),
-                                items: ['Nenhuma', ..._positions]
+                                items: FootballPositions.secondaryPositions
                                     .map((String position) {
                                   return DropdownMenuItem<String>(
                                     value: position,

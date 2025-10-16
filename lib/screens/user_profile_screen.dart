@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 import '../providers/auth_provider.dart';
 import '../services/player_service.dart';
 import '../models/player_model.dart';
+import '../config/supabase_config.dart';
+import '../constants/football_positions.dart';
 
 class UserProfileScreen extends ConsumerStatefulWidget {
   const UserProfileScreen({super.key});
@@ -20,6 +24,11 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
 
   Player? _player;
 
+  // Variáveis para foto de perfil
+  File? _profileImage;
+  String? _profileImageUrl;
+  bool _isUploadingImage = false;
+
   // Controllers para edição
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
@@ -34,29 +43,18 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
 
   // Valores selecionados
   DateTime? _selectedBirthDate;
-  String _selectedPrimaryPosition = 'Meias';
+  String _selectedPrimaryPosition = 'Goleiro';
   String _selectedSecondaryPosition = 'Nenhuma';
   String _selectedPreferredFoot = 'Direita';
-  String _selectedPlayerType = 'casual';
 
   // Controle de visibilidade das senhas
   bool _obscureCurrentPassword = true;
   bool _obscureNewPassword = true;
   bool _obscureConfirmPassword = true;
 
-  final List<String> _positions = [
-    'Goleiro',
-    'Fixo',
-    'Alas',
-    'Meias',
-    'Pivô',
-  ];
-
-  final List<String> _feet = [
-    'Direita',
-    'Esquerda',
-    'Ambidestro',
-  ];
+  // Usar posições do Futebol 7
+  final List<String> _positions = FootballPositions.positions;
+  final List<String> _feet = FootballPositions.preferredFeet;
 
   @override
   void initState() {
@@ -111,9 +109,12 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
           _loadUserDataForProfile(); // Carregar dados do usuário para o perfil
         });
       }
+
+      // Carregar foto de perfil
+      await _loadProfileImage();
     } catch (e) {
       setState(() {
-        _error = 'Erro ao carregar perfil: $e';
+        _error = 'Erro ao criar o perfil do jogador: $e';
       });
     } finally {
       setState(() {
@@ -124,13 +125,29 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
 
   void _loadPlayerData() {
     if (_player != null) {
+      final currentUser = ref.read(currentUserProvider);
       _nameController.text = _player!.name;
+      _emailController.text = currentUser?.email ?? '';
       _phoneController.text = _player!.phoneNumber;
-      _selectedPlayerType = _player!.type;
       _selectedBirthDate = _player!.birthDate;
-      _selectedPrimaryPosition = _player!.primaryPosition ?? 'Meias';
+
+      print('🔍 DEBUG - E-mail carregado no perfil: ${currentUser?.email}');
+      // Validar e ajustar posições para as novas posições do Futebol 7
+      _selectedPrimaryPosition = _player!.primaryPosition ?? 'Goleiro';
+      if (!_positions.contains(_selectedPrimaryPosition)) {
+        _selectedPrimaryPosition = 'Goleiro';
+      }
+
       _selectedSecondaryPosition = _player!.secondaryPosition ?? 'Nenhuma';
+      if (!FootballPositions.secondaryPositions
+          .contains(_selectedSecondaryPosition)) {
+        _selectedSecondaryPosition = 'Nenhuma';
+      }
+
       _selectedPreferredFoot = _player!.preferredFoot ?? 'Direita';
+      if (!_feet.contains(_selectedPreferredFoot)) {
+        _selectedPreferredFoot = 'Direita';
+      }
 
       if (_selectedBirthDate != null) {
         _birthDateController.text = _formatDate(_selectedBirthDate!);
@@ -144,11 +161,24 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
       _nameController.text = currentUser.name;
       _emailController.text = currentUser.email;
       _phoneController.text = currentUser.phone ?? '';
-      _selectedPlayerType = 'casual'; // Tipo padrão
-      _selectedPrimaryPosition = 'Meias';
+      _selectedPrimaryPosition = 'Goleiro';
       _selectedSecondaryPosition = 'Nenhuma';
       _selectedPreferredFoot = 'Direita';
       print('🔍 DEBUG - Dados do usuário carregados: ${currentUser.email}');
+    }
+  }
+
+  Future<void> _loadProfileImage() async {
+    try {
+      final currentUser = ref.read(currentUserProvider);
+      if (currentUser != null) {
+        // Usar a URL da foto de perfil do modelo User
+        setState(() {
+          _profileImageUrl = currentUser.profileImageUrl;
+        });
+      }
+    } catch (e) {
+      print('❌ Erro ao carregar foto de perfil: $e');
     }
   }
 
@@ -170,6 +200,128 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
 
   String _formatDate(DateTime date) {
     return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+  }
+
+  int _calculateAge(DateTime birthDate) {
+    final now = DateTime.now();
+    int age = now.year - birthDate.year;
+
+    // Verificar se o aniversário ainda não aconteceu este ano
+    if (now.month < birthDate.month ||
+        (now.month == birthDate.month && now.day < birthDate.day)) {
+      age--;
+    }
+
+    return age;
+  }
+
+  String _formatBirthDateWithAge(DateTime birthDate) {
+    final age = _calculateAge(birthDate);
+    final formattedDate = _formatDate(birthDate);
+    return '$formattedDate ($age anos)';
+  }
+
+  Future<void> _selectProfileImage() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 512,
+        maxHeight: 512,
+        imageQuality: 80,
+      );
+
+      if (image != null) {
+        setState(() {
+          _profileImage = File(image.path);
+        });
+
+        // Fazer upload automaticamente para o Supabase
+        await _uploadProfileImageSimple();
+      }
+    } catch (e) {
+      print('❌ Erro ao selecionar imagem: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro ao selecionar imagem: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _uploadProfileImageSimple() async {
+    if (_profileImage == null) return;
+
+    try {
+      setState(() {
+        _isUploadingImage = true;
+      });
+
+      final currentUser = ref.read(currentUserProvider);
+      if (currentUser == null) {
+        throw Exception('Usuário não encontrado');
+      }
+
+      print('📤 Upload iniciado...');
+
+      // Gerar nome único para o arquivo
+      final fileName =
+          'profile_${currentUser.id}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+
+      // Fazer upload
+      await SupabaseConfig.client.storage
+          .from('profile-images')
+          .upload(fileName, _profileImage!);
+
+      print('✅ Upload concluído');
+
+      // Obter URL pública da imagem
+      final imageUrl = SupabaseConfig.client.storage
+          .from('profile-images')
+          .getPublicUrl(fileName);
+
+      // Atualizar o banco de dados
+      await SupabaseConfig.client
+          .from('users')
+          .update({'profile_image_url': imageUrl}).eq('id', currentUser.id);
+
+      // Atualizar o provider
+      final updatedUser = currentUser.copyWith(profileImageUrl: imageUrl);
+      ref.read(authStateProvider.notifier).updateUser(updatedUser);
+
+      setState(() {
+        _profileImageUrl = imageUrl;
+        _isUploadingImage = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Foto atualizada com sucesso!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _isUploadingImage = false;
+      });
+
+      print('❌ Erro no upload simples: $e');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Erro: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _saveProfile() async {
@@ -205,7 +357,6 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
           userId: currentUser.id,
           name: _nameController.text.trim(),
           phoneNumber: _phoneController.text.trim(),
-          type: _selectedPlayerType,
           birthDate: _selectedBirthDate,
           primaryPosition: _selectedPrimaryPosition == 'Nenhuma'
               ? null
@@ -241,7 +392,6 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
           playerId: _player!.id,
           name: _nameController.text.trim(),
           phoneNumber: _phoneController.text.trim(),
-          type: _selectedPlayerType,
           birthDate: _selectedBirthDate,
           primaryPosition: _selectedPrimaryPosition == 'Nenhuma'
               ? null
@@ -274,7 +424,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
       }
     } catch (e) {
       setState(() {
-        _error = 'Erro ao salvar perfil: $e';
+        _error = e.toString().replaceFirst('Exception: ', '');
       });
     } finally {
       setState(() {
@@ -300,18 +450,13 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
       print('🔍 DEBUG - Email atual: ${currentUser.email}');
       print('🔍 DEBUG - Email novo: ${_emailController.text.trim()}');
 
-      // Verificar se o email foi alterado
-      bool emailChanged = _emailController.text.trim() != currentUser.email;
-      print('🔍 DEBUG - Email alterado: $emailChanged');
+      // Email não pode ser alterado - sempre usar o email atual do usuário
+      print(
+          '🔍 DEBUG - Email não pode ser alterado - usando email atual: ${currentUser.email}');
 
       // Verificar se a senha foi alterada
       bool passwordChanged = _newPasswordController.text.isNotEmpty;
       print('🔍 DEBUG - Senha alterada: $passwordChanged');
-
-      // Se o email foi alterado, não é necessário validar senha (usuário já está autenticado)
-      if (emailChanged) {
-        print('🔍 DEBUG - Email será alterado (usuário já autenticado)');
-      }
 
       if (passwordChanged) {
         // Validar senha atual
@@ -358,32 +503,12 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
 
       print('✅ Dados básicos do usuário atualizados com sucesso');
 
-      // Se o email foi alterado, atualizar email
-      if (emailChanged) {
-        print('🔍 DEBUG - Iniciando atualização de email');
-        final emailUpdated =
-            await ref.read(authStateProvider.notifier).updateEmail(
-                  newEmail: _emailController.text.trim(),
-                  password: '', // Não é necessário senha para alterar email
-                );
-
-        print('🔍 DEBUG - Resultado da atualização de email: $emailUpdated');
-
-        if (!emailUpdated) {
-          print('❌ Erro ao atualizar email');
-          setState(() {
-            _error = 'Erro ao atualizar email';
-          });
-          return false;
-        }
-
-        print('✅ Email atualizado com sucesso');
-      }
+      // Email não é alterado - sempre usar o email atual do usuário
 
       // Nota: Alteração de senha agora é feita através do botão "Alterar Senha"
 
       // Limpar campos de senha após sucesso
-      if (emailChanged || passwordChanged) {
+      if (passwordChanged) {
         _currentPasswordController.clear();
         _newPasswordController.clear();
         _confirmPasswordController.clear();
@@ -440,7 +565,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
           ),
           const SizedBox(height: 16),
           Text(
-            'Erro ao carregar perfil',
+            'Erro ao criar o perfil do jogador',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -464,6 +589,10 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
   }
 
   Widget _buildProfileContent(currentUser) {
+    print(
+        '🔍 DEBUG - _buildProfileContent - currentUser: ${currentUser?.email}');
+    print('🔍 DEBUG - _buildProfileContent - telefone: ${currentUser?.phone}');
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Form(
@@ -471,6 +600,11 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Widget de foto de perfil
+            _buildProfilePhotoSection(currentUser),
+
+            const SizedBox(height: 16),
+
             // Card de informações do usuário
             Card(
               child: Padding(
@@ -807,11 +941,15 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
               );
 
       if (passwordUpdated) {
-        Navigator.of(context).pop();
-        _clearPasswordFields();
-        _showSuccessDialog('Senha alterada com sucesso!');
+        if (mounted) {
+          Navigator.of(context).pop();
+          _clearPasswordFields();
+          _showSuccessDialog('Senha alterada com sucesso!');
+        }
       } else {
-        _showErrorDialog('Erro ao alterar senha');
+        if (mounted) {
+          _showErrorDialog('Erro ao alterar senha');
+        }
       }
     } catch (e) {
       _showErrorDialog('Erro ao alterar senha: $e');
@@ -887,6 +1025,115 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
     );
   }
 
+  Widget _buildProfilePhotoSection(currentUser) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          children: [
+            // Foto de perfil
+            Stack(
+              children: [
+                CircleAvatar(
+                  radius: 60,
+                  backgroundColor: Colors.grey[300],
+                  backgroundImage: _profileImage != null
+                      ? FileImage(_profileImage!) as ImageProvider
+                      : _profileImageUrl != null
+                          ? NetworkImage(_profileImageUrl!) as ImageProvider
+                          : null,
+                  child: _profileImage == null && _profileImageUrl == null
+                      ? Icon(
+                          Icons.person,
+                          size: 60,
+                          color: Colors.grey[600],
+                        )
+                      : null,
+                ),
+                if (_isUploadingImage)
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.5),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Center(
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                // Botão de editar foto
+                Positioned(
+                  bottom: 0,
+                  right: 0,
+                  child: GestureDetector(
+                    onTap: _selectProfileImage,
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.blue,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                      ),
+                      child: const Icon(
+                        Icons.camera_alt,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(width: 20),
+            // Informações do usuário e botão
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Nome do usuário
+                  Text(
+                    currentUser?.name ?? 'Usuário',
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  // Email do usuário
+                  Text(
+                    currentUser?.email ?? '',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  // Botão para alterar foto
+                  ElevatedButton.icon(
+                    onPressed: _selectProfileImage,
+                    icon: const Icon(Icons.photo_camera),
+                    label: const Text('Alterar Foto'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildInfoRow(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -922,11 +1169,9 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
                 ? _formatDate(currentUser!.createdAt)
                 : 'N/A'),
         _buildInfoRow(
-            'Tipo', _player?.type == 'monthly' ? 'Mensalista' : 'Avulso'),
-        _buildInfoRow(
             'Data de Nascimento',
             _player?.birthDate != null
-                ? _formatDate(_player!.birthDate!)
+                ? _formatBirthDateWithAge(_player!.birthDate!)
                 : 'N/A'),
         _buildInfoRow('Posição Principal', _player?.primaryPosition ?? 'N/A'),
         _buildInfoRow(
@@ -959,15 +1204,21 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
 
         const SizedBox(height: 16),
 
-        // Email
+        // Email - somente leitura para usuários existentes
         TextFormField(
           controller: _emailController,
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             labelText: 'Email',
-            prefixIcon: Icon(Icons.email),
-            border: OutlineInputBorder(),
+            prefixIcon: const Icon(Icons.email),
+            border: const OutlineInputBorder(),
+            suffixIcon: const Icon(Icons.lock, color: Colors.grey),
+            helperText: 'Email não pode ser alterado após o cadastro',
+            filled: true,
+            fillColor: Colors.grey.shade100,
           ),
           keyboardType: TextInputType.emailAddress,
+          readOnly: true, // Sempre somente leitura
+          style: TextStyle(color: Colors.grey.shade600),
           validator: (value) {
             if (value == null || value.trim().isEmpty) {
               return 'Email é obrigatório';
@@ -1015,27 +1266,6 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
 
         const SizedBox(height: 24),
 
-        // Tipo de jogador
-        DropdownButtonFormField<String>(
-          initialValue: _selectedPlayerType,
-          decoration: const InputDecoration(
-            labelText: 'Tipo de Jogador',
-            prefixIcon: Icon(Icons.category),
-            border: OutlineInputBorder(),
-          ),
-          items: const [
-            DropdownMenuItem(value: 'casual', child: Text('Avulso')),
-            DropdownMenuItem(value: 'monthly', child: Text('Mensalista')),
-          ],
-          onChanged: (value) {
-            setState(() {
-              _selectedPlayerType = value!;
-            });
-          },
-        ),
-
-        const SizedBox(height: 16),
-
         // Data de nascimento
         TextFormField(
           controller: _birthDateController,
@@ -1052,7 +1282,9 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
 
         // Posição principal
         DropdownButtonFormField<String>(
-          initialValue: _selectedPrimaryPosition,
+          initialValue: _positions.contains(_selectedPrimaryPosition)
+              ? _selectedPrimaryPosition
+              : _positions.first,
           decoration: const InputDecoration(
             labelText: 'Posição Principal',
             prefixIcon: Icon(Icons.sports_soccer),
@@ -1075,13 +1307,16 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
 
         // Posição secundária
         DropdownButtonFormField<String>(
-          initialValue: _selectedSecondaryPosition,
+          initialValue: FootballPositions.secondaryPositions
+                  .contains(_selectedSecondaryPosition)
+              ? _selectedSecondaryPosition
+              : FootballPositions.secondaryPositions.first,
           decoration: const InputDecoration(
             labelText: 'Posição Secundária',
             prefixIcon: Icon(Icons.sports_soccer),
             border: OutlineInputBorder(),
           ),
-          items: ['Nenhuma', ..._positions].map((position) {
+          items: FootballPositions.secondaryPositions.map((position) {
             return DropdownMenuItem(
               value: position,
               child: Text(position),
@@ -1098,7 +1333,9 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
 
         // Pé preferido
         DropdownButtonFormField<String>(
-          initialValue: _selectedPreferredFoot,
+          initialValue: _feet.contains(_selectedPreferredFoot)
+              ? _selectedPreferredFoot
+              : _feet.first,
           decoration: const InputDecoration(
             labelText: 'Pé Preferido',
             prefixIcon: Icon(Icons.directions_run),

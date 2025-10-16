@@ -23,14 +23,6 @@ class _GameSearchScreenState extends ConsumerState<GameSearchScreen> {
   }
 
   Future<void> _searchGames() async {
-    if (_searchController.text.trim().isEmpty) {
-      setState(() {
-        _games = [];
-        _error = 'Digite um termo para buscar';
-      });
-      return;
-    }
-
     try {
       setState(() {
         _isLoading = true;
@@ -39,35 +31,66 @@ class _GameSearchScreenState extends ConsumerState<GameSearchScreen> {
 
       final searchTerm = _searchController.text.trim();
 
-      // Buscar jogos públicos que correspondem ao termo de busca
-      final response = await SupabaseConfig.client
-          .from('games')
-          .select('''
-            id,
-            organization_name,
-            location,
-            address,
-            status,
-            created_at,
-            players_per_team,
-            substitutes_per_team,
-            number_of_teams,
-            start_time,
-            end_time,
-            game_date,
-            day_of_week,
-            frequency,
-            user_id
-          ''')
-          .eq('status', 'active')
-          .or('organization_name.ilike.%$searchTerm%,location.ilike.%$searchTerm%')
-          .order('created_at', ascending: false)
-          .limit(20);
+      // Se não há termo de busca, listar todos os jogos ativos
+      if (searchTerm.isEmpty) {
+        final response = await SupabaseConfig.client
+            .from('games')
+            .select('''
+              id,
+              organization_name,
+              location,
+              address,
+              status,
+              created_at,
+              players_per_team,
+              substitutes_per_team,
+              number_of_teams,
+              start_time,
+              end_time,
+              game_date,
+              day_of_week,
+              frequency,
+              user_id
+            ''')
+            .eq('status', 'active')
+            .order('created_at', ascending: false)
+            .limit(50);
 
-      setState(() {
-        _games = List<Map<String, dynamic>>.from(response);
-        _isLoading = false;
-      });
+        setState(() {
+          _games = List<Map<String, dynamic>>.from(response);
+          _isLoading = false;
+        });
+      } else {
+        // Buscar jogos públicos que correspondem ao termo de busca
+        final response = await SupabaseConfig.client
+            .from('games')
+            .select('''
+              id,
+              organization_name,
+              location,
+              address,
+              status,
+              created_at,
+              players_per_team,
+              substitutes_per_team,
+              number_of_teams,
+              start_time,
+              end_time,
+              game_date,
+              day_of_week,
+              frequency,
+              user_id
+            ''')
+            .eq('status', 'active')
+            .or('organization_name.ilike.%$searchTerm%,location.ilike.%$searchTerm%')
+            .order('created_at', ascending: false)
+            .limit(20);
+
+        setState(() {
+          _games = List<Map<String, dynamic>>.from(response);
+          _isLoading = false;
+        });
+      }
     } catch (e) {
       setState(() {
         _error = e.toString();
@@ -145,6 +168,9 @@ class _GameSearchScreenState extends ConsumerState<GameSearchScreen> {
             backgroundColor: Colors.green,
           ),
         );
+
+        // Retornar para a tela anterior com indicação de mudança
+        Navigator.of(context).pop(true);
       }
     } catch (e) {
       if (mounted) {
@@ -249,7 +275,8 @@ class _GameSearchScreenState extends ConsumerState<GameSearchScreen> {
                     controller: _searchController,
                     decoration: const InputDecoration(
                       labelText: 'Buscar jogos...',
-                      hintText: 'Digite o nome da organização ou local',
+                      hintText:
+                          'Digite o nome da organização ou local (deixe vazio para listar todos)',
                       prefixIcon: Icon(Icons.search),
                       border: OutlineInputBorder(),
                     ),
@@ -277,6 +304,29 @@ class _GameSearchScreenState extends ConsumerState<GameSearchScreen> {
                       : const Icon(Icons.search),
                 ),
               ],
+            ),
+          ),
+
+          // Botão para listar todos os jogos
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _isLoading
+                    ? null
+                    : () {
+                        _searchController.clear();
+                        _searchGames();
+                      },
+                icon: const Icon(Icons.list),
+                label: const Text('Listar Todos os Jogos'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.green,
+                  side: const BorderSide(color: Colors.green),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
             ),
           ),
 
@@ -354,6 +404,8 @@ class _GameSearchScreenState extends ConsumerState<GameSearchScreen> {
   }
 
   Widget _buildEmptyState() {
+    final hasSearched = _searchController.text.trim().isNotEmpty;
+
     return Center(
       child: Card(
         margin: const EdgeInsets.all(16),
@@ -363,28 +415,42 @@ class _GameSearchScreenState extends ConsumerState<GameSearchScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                Icons.search_off,
+                hasSearched ? Icons.search_off : Icons.sports_soccer_outlined,
                 size: 64,
                 color: Colors.grey.shade400,
               ),
               const SizedBox(height: 16),
-              const Text(
-                'Nenhum jogo encontrado',
-                style: TextStyle(
+              Text(
+                hasSearched
+                    ? 'Nenhum jogo encontrado'
+                    : 'Nenhum jogo cadastrado',
+                style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                 ),
               ),
               const SizedBox(height: 8),
               Text(
-                _searchController.text.trim().isEmpty
-                    ? 'Digite um termo para buscar jogos'
-                    : 'Tente usar outros termos de busca',
+                hasSearched
+                    ? 'Tente usar outros termos de busca'
+                    : 'Não há jogos disponíveis no momento',
                 style: TextStyle(
                   color: Colors.grey[600],
                 ),
                 textAlign: TextAlign.center,
               ),
+              if (!hasSearched) ...[
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  onPressed: _searchGames,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Atualizar Lista'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ],
             ],
           ),
         ),

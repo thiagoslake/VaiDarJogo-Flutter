@@ -30,11 +30,17 @@ class SupabaseConfig {
 
       print('✅ Supabase inicializado com sucesso');
 
-      // Testar conexão imediatamente
-      final testClient = Supabase.instance.client;
-      final response =
-          await testClient.from('app_users').select('count').limit(1);
-      print('✅ Teste de conexão bem-sucedido: $response');
+      // Testar conexão com uma tabela que existe
+      try {
+        final testClient = Supabase.instance.client;
+        final response =
+            await testClient.from('users').select('count').limit(1);
+        print('✅ Teste de conexão bem-sucedido: $response');
+      } catch (testError) {
+        print(
+            '⚠️ Teste de conexão falhou, mas Supabase foi inicializado: $testError');
+        // Não rethrow aqui, pois o Supabase pode estar funcionando mesmo com erro no teste
+      }
     } catch (e) {
       print('❌ Erro ao inicializar Supabase: $e');
       rethrow;
@@ -47,6 +53,7 @@ class SupabaseConfig {
       Supabase.instance.client;
       return true;
     } catch (e) {
+      print('⚠️ Supabase não está inicializado: $e');
       return false;
     }
   }

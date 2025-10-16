@@ -11,6 +11,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
 
   # =====================================================
   # 🎨 UI & DESIGN
@@ -53,8 +55,8 @@ dependencies:
   # Supabase client
   supabase_flutter: ^2.3.4
   
-  # Google Places API para autocompletar endereços
-  google_places_flutter: ^2.0.8
+  # HTTP para chamadas da API do Google Places (Nova API)
+  http: ^1.1.0
   
   # =====================================================
   # 💾 STORAGE & DATABASE
@@ -83,9 +85,9 @@ dependencies:
   # 📱 NOTIFICATIONS
   # =====================================================
   
-  # Push notifications (comentado temporariamente)
-  # firebase_messaging: ^14.7.10
-  # firebase_core: ^2.24.2
+  # Push notifications
+  firebase_messaging: ^14.7.10
+  firebase_core: ^2.24.2
   
   # =====================================================
   # 📊 CHARTS & GRAPHS
@@ -148,6 +150,7 @@ dependencies:
   # iOS specific
   device_info_plus: ^9.1.1
   
+dev_dependencies:
   # =====================================================
   # 🧪 TESTING
   # =====================================================
@@ -160,7 +163,6 @@ dependencies:
   mockito: ^5.4.4
   build_runner: ^2.4.7
 
-dev_dependencies:
   # Code generation
   riverpod_generator: ^2.3.9
   
@@ -191,10 +193,6 @@ flutter:
     - assets/icons/
     - assets/animations/
     - assets/translations/
-  
-
-  
-
 
 # =====================================================
 # 🔧 BUILD CONFIGURATION
@@ -215,51 +213,3 @@ build:
             enable_asserts: true
             enable_connection_state: true
             enable_global_provider: true
-
-# =====================================================
-# 📋 SCRIPTS
-# =====================================================
-
-scripts:
-  # Geração de código
-  generate: dart run build_runner build --delete-conflicting-outputs
-  
-  # Limpeza
-  clean: flutter clean && dart run build_runner clean
-  
-  # Testes
-  test: flutter test
-  test:coverage: flutter test --coverage
-  
-  # Build
-  build:android: flutter build apk --release
-  build:ios: flutter build ios --release
-  
-  # Deploy
-  deploy:android: flutter build appbundle --release
-  deploy:ios: flutter build ios --release
-
-# =====================================================
-# 📚 DOCUMENTATION
-# =====================================================
-
-# Informações do projeto
-homepage: https://github.com/vaidarjogo/flutter-app
-repository: https://github.com/vaidarjogo/flutter-app
-issue_tracker: https://github.com/vaidarjogo/flutter-app/issues
-
-# Licença
-license: MIT
-
-# Palavras-chave
-keywords:
-  - flutter
-  - dart
-  - mobile
-  - futebol
-  - jogos
-  - gestão
-  - supabase
-  - postgresql
-  - riverpod
-  - material-design

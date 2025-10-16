@@ -19,6 +19,7 @@ class Game {
   final String? gameDate;
   final String? dayOfWeek;
   final String? frequency;
+  final String? endDate;
   final Map<String, dynamic>? priceConfig;
 
   Game({
@@ -37,6 +38,7 @@ class Game {
     this.gameDate,
     this.dayOfWeek,
     this.frequency,
+    this.endDate,
     this.priceConfig,
   });
 
@@ -57,6 +59,7 @@ class Game {
       gameDate: map['game_date'],
       dayOfWeek: map['day_of_week'],
       frequency: map['frequency'],
+      endDate: map['end_date'],
       priceConfig: map['price_config'] != null
           ? Map<String, dynamic>.from(map['price_config'])
           : null,
@@ -86,7 +89,7 @@ final gamesListProvider = FutureProvider<List<Game>>((ref) async {
     final response = await SupabaseConfig.client
         .from('games')
         .select(
-            'id, user_id, organization_name, location, address, status, created_at, players_per_team, substitutes_per_team, number_of_teams, start_time, end_time, game_date, day_of_week, frequency, price_config')
+            'id, user_id, organization_name, location, address, status, created_at, players_per_team, substitutes_per_team, number_of_teams, start_time, end_time, game_date, day_of_week, frequency, end_date, price_config')
         .eq('user_id', currentUser.id)
         .order('created_at', ascending: false);
 
@@ -129,7 +132,7 @@ final activeGamesProvider = FutureProvider<List<Game>>((ref) async {
     final response = await SupabaseConfig.client
         .from('games')
         .select(
-            'id, user_id, organization_name, location, address, status, created_at, players_per_team, substitutes_per_team, number_of_teams, start_time, end_time, game_date, day_of_week, frequency, price_config')
+            'id, user_id, organization_name, location, address, status, created_at, players_per_team, substitutes_per_team, number_of_teams, start_time, end_time, game_date, day_of_week, frequency, end_date, price_config')
         .eq('user_id', currentUser.id)
         .eq('status', 'active')
         .order('created_at', ascending: false);

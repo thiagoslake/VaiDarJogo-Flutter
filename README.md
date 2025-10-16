@@ -1,89 +1,72 @@
-# VaiDarJogo - Aplicativo Flutter
+# VaiDarJogo Flutter
 
-Este é o aplicativo móvel Flutter do sistema VaiDarJogo, responsável pela interface do usuário e funcionalidades do cliente.
+Aplicativo Flutter para gerenciamento de jogos de futebol, permitindo que usuários criem, gerenciem e participem de jogos organizados.
 
-## 📱 Sobre o Aplicativo
+## 📚 Documentação
 
-O aplicativo Flutter permite que usuários:
-- Se registrem e façam login no sistema
-- Visualizem e gerenciem jogos
-- Configurem notificações
-- Administrem perfis de jogadores
-- Acessem painéis administrativos
+Toda a documentação do projeto está organizada na pasta [`docs/`](./docs/). Consulte o [README da documentação](./docs/README.md) para entender a estrutura e como navegar pelos documentos.
 
-## 🚀 Tecnologias Utilizadas
+### Documentos Principais
+- [Guia de Início Rápido](./docs/QUICK_START_GUIDE.md)
+- [Documentação de Autenticação](./docs/AUTHENTICATION_README.md)
+- [Sistema de Notificações](./docs/NOTIFICATION_SYSTEM_README.md)
 
-- **Flutter** - Framework de desenvolvimento móvel
-- **Dart** - Linguagem de programação
-- **Supabase** - Backend como serviço (autenticação e banco de dados)
-- **Google Places API** - Integração com serviços de localização
+## 🚀 Início Rápido
 
-## 📁 Estrutura do Projeto
+1. Clone o repositório
+2. Execute `flutter pub get` para instalar as dependências
+3. Configure as variáveis de ambiente necessárias
+4. Execute `flutter run` para iniciar o aplicativo
+
+Para instruções detalhadas, consulte o [Guia de Início Rápido](./docs/QUICK_START_GUIDE.md).
+
+## 🏗️ Estrutura do Projeto
 
 ```
 lib/
-├── config/           # Configurações do Supabase e Google Places
-├── models/           # Modelos de dados (Player, User)
-├── providers/        # Gerenciamento de estado (Auth, Game Status)
-├── screens/          # Telas da aplicação
-├── services/         # Serviços (Auth, Places, Player, Session)
-├── utils/            # Utilitários e tratamento de erros
-└── widgets/          # Componentes reutilizáveis
+├── config/          # Configurações do app
+├── constants/       # Constantes e enums
+├── models/          # Modelos de dados
+├── providers/       # Gerenciamento de estado
+├── screens/         # Telas da aplicação
+├── services/        # Serviços e APIs
+├── utils/           # Utilitários e helpers
+└── widgets/         # Widgets reutilizáveis
+
+docs/                # Documentação completa
+database/            # Scripts de banco de dados
+assets/              # Recursos estáticos
 ```
 
-## 🛠️ Configuração e Instalação
+## 📱 Funcionalidades
 
-1. **Pré-requisitos:**
-   - Flutter SDK instalado
-   - Dart SDK
-   - Android Studio ou VS Code com extensões Flutter
+- ✅ Autenticação de usuários
+- ✅ Criação e gerenciamento de jogos
+- ✅ Sistema de notificações
+- ✅ Perfis de jogadores
+- ✅ Gerenciamento de sessões
+- ✅ Integração com Google Places
+- ✅ Sistema de administração
 
-2. **Instalação:**
-   ```bash
-   cd VaiDarJogo_Flutter
-   flutter pub get
-   ```
+## 🛠️ Tecnologias
 
-3. **Configuração:**
-   - Configure as credenciais do Supabase em `lib/config/supabase_config.dart`
-   - Configure a API do Google Places em `lib/config/google_places_config.dart`
+- **Flutter** - Framework de desenvolvimento
+- **Supabase** - Backend e banco de dados
+- **Firebase** - Notificações push
+- **Google Places** - Localização
 
-4. **Execução:**
-   ```bash
-   flutter run
-   ```
+## 📖 Documentação Detalhada
 
-## 📱 Plataformas Suportadas
+Para documentação completa sobre implementações, correções, configurações e migrações, consulte a pasta [`docs/`](./docs/).
 
-- Android
-- iOS
-- Web
-- Windows
-- macOS
-- Linux
+## 🤝 Contribuição
 
-## 🔧 Funcionalidades Principais
+1. Consulte a documentação na pasta `docs/`
+2. Siga as convenções de nomenclatura documentadas
+3. Mantenha a documentação atualizada
+4. Teste suas alterações antes de submeter
 
-- **Autenticação:** Login e registro de usuários
-- **Gestão de Jogos:** Criação, edição e visualização de jogos
-- **Notificações:** Configuração e gerenciamento de notificações
-- **Perfis:** Gerenciamento de perfis de jogadores
-- **Administração:** Painel administrativo para gestão do sistema
+## 📄 Licença
 
-## 📚 Documentação Adicional
+Este projeto é privado e proprietário.
 
-- `AUTHENTICATION_README.md` - Guia de autenticação
-- `GOOGLE_PLACES_SETUP.md` - Configuração do Google Places
-- `MIGRATION_SUMMARY.md` - Resumo de migrações
-- `QUICK_START_GUIDE.md` - Guia de início rápido
-
-## 🔗 Integração com o Motor
-
-Este aplicativo se conecta com o **VaiDarJogo_Motor** (backend) através de:
-- API REST do Supabase
-- WebSockets para notificações em tempo real
-- Autenticação JWT
-
-## 📞 Suporte
-
-Para dúvidas ou problemas, consulte a documentação ou entre em contato com a equipe de desenvolvimento.

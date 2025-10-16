@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/supabase_config.dart';
 import '../providers/selected_game_provider.dart';
+import '../services/player_service.dart';
 
 class CasualPlayersScreen extends ConsumerStatefulWidget {
   const CasualPlayersScreen({super.key});
@@ -40,36 +41,30 @@ class _CasualPlayersScreenState extends ConsumerState<CasualPlayersScreen> {
       }
 
       // Buscar jogadores avulsos do jogo selecionado
-      final response = await SupabaseConfig.client
-          .from('game_players')
-          .select('''
-            players:player_id (
-              id,
-              name,
-              phone_number,
-              type,
-              birth_date,
-              primary_position,
-              secondary_position,
-              preferred_foot,
-              status,
-              created_at
-            )
-          ''')
-          .eq('game_id', selectedGame.id)
-          .eq('status', 'active')
-          .eq('players.type', 'casual')
-          .eq('players.status', 'active')
-          .order('players(name)', ascending: true);
+      final gamePlayers = await PlayerService.getGamePlayersByType(
+        gameId: selectedGame.id,
+        playerType: 'casual',
+      );
 
-      // Extrair os dados dos jogadores da resposta
-      final players = response
-          .map<Map<String, dynamic>>((item) {
-            final playerData = item['players'] as Map<String, dynamic>?;
-            return playerData ?? {};
-          })
-          .where((player) => player.isNotEmpty)
-          .toList();
+      // Buscar dados dos jogadores
+      final response = await SupabaseConfig.client
+          .from('players')
+          .select('''
+            id,
+            name,
+            phone_number,
+            birth_date,
+            primary_position,
+            secondary_position,
+            preferred_foot,
+            status,
+            created_at
+          ''')
+          .inFilter('id', gamePlayers.map((gp) => gp.playerId).toList())
+          .order('name', ascending: true);
+
+      // Os dados dos jogadores já estão na resposta
+      final players = response;
 
       setState(() {
         _players = players;

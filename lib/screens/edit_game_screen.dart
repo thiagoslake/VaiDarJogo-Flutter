@@ -4,6 +4,7 @@ import '../config/supabase_config.dart';
 import '../providers/selected_game_provider.dart';
 import '../providers/game_status_provider.dart';
 import '../services/session_management_service.dart';
+import '../widgets/safe_location_field.dart';
 
 class EditGameScreen extends ConsumerStatefulWidget {
   const EditGameScreen({super.key});
@@ -26,6 +27,9 @@ class _EditGameScreenState extends ConsumerState<EditGameScreen> {
   final _startTimeController = TextEditingController();
   final _endTimeController = TextEditingController();
   final _gameDateController = TextEditingController();
+  final _endDateController = TextEditingController();
+  final _monthlyPriceController = TextEditingController();
+  final _casualPriceController = TextEditingController();
 
   // Valores selecionados
   String _selectedFrequency = 'Jogo Avulso';
@@ -33,6 +37,7 @@ class _EditGameScreenState extends ConsumerState<EditGameScreen> {
   TimeOfDay _startTime = const TimeOfDay(hour: 19, minute: 0);
   TimeOfDay _endTime = const TimeOfDay(hour: 21, minute: 0);
   DateTime _selectedDate = DateTime.now();
+  DateTime? _selectedEndDate;
 
   final List<String> _frequencies = [
     'Diária',
@@ -56,6 +61,15 @@ class _EditGameScreenState extends ConsumerState<EditGameScreen> {
   void initState() {
     super.initState();
     _loadGameData();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Recarregar dados quando as dependências mudarem
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadGameData();
+    });
   }
 
   void _loadGameData() {
@@ -94,9 +108,40 @@ class _EditGameScreenState extends ConsumerState<EditGameScreen> {
         _gameDateController.text = _formatDate(_selectedDate);
       }
 
+      // Carregar endDate
+      if (selectedGame.endDate != null && selectedGame.endDate!.isNotEmpty) {
+        try {
+          _selectedEndDate = DateTime.parse(selectedGame.endDate!);
+          _endDateController.text = _formatDate(_selectedEndDate!);
+          print('✅ Data limite carregada: ${_endDateController.text}');
+        } catch (e) {
+          print('❌ Erro ao carregar data limite: $e');
+          _selectedEndDate = null;
+          _endDateController.clear();
+        }
+      } else {
+        print('ℹ️ Nenhuma data limite definida para este jogo');
+        _selectedEndDate = null;
+        _endDateController.clear();
+      }
+
       _selectedFrequency = selectedGame.frequency ?? 'Jogo Avulso';
       _selectedDayOfWeek =
           _mapDayOfWeekFromDatabase(selectedGame.dayOfWeek ?? '');
+
+      // Carregar preços se existirem
+      if (selectedGame.priceConfig != null) {
+        final monthlyPrice = selectedGame.priceConfig!['monthly'];
+        final casualPrice = selectedGame.priceConfig!['casual'];
+
+        if (monthlyPrice != null && monthlyPrice > 0) {
+          _monthlyPriceController.text = monthlyPrice.toString();
+        }
+
+        if (casualPrice != null && casualPrice > 0) {
+          _casualPriceController.text = casualPrice.toString();
+        }
+      }
     }
   }
 
@@ -166,30 +211,25 @@ class _EditGameScreenState extends ConsumerState<EditGameScreen> {
   }
 
   String _formatDate(DateTime date) {
-    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
-  }
-
-  /// Converte data do formato brasileiro (DD/MM/YYYY) para formato PostgreSQL (YYYY-MM-DD)
-  String _convertDateToPostgreSQL(String brazilianDate) {
-    if (brazilianDate.isEmpty) return '';
-
-    try {
-      final parts = brazilianDate.split('/');
-      if (parts.length == 3) {
-        final day = parts[0].padLeft(2, '0');
-        final month = parts[1].padLeft(2, '0');
-        final year = parts[2];
-        return '$year-$month-$day';
-      }
-    } catch (e) {
-      print('❌ Erro ao converter data: $e');
-    }
-
-    return brazilianDate; // Retorna original se não conseguir converter
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 
   String _formatTime(TimeOfDay time) {
     return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+  }
+
+  /// Força a atualização do campo de data final
+  void _updateEndDateField() {
+    if (_selectedEndDate != null) {
+      final formattedDate = _formatDate(_selectedEndDate!);
+      if (_endDateController.text != formattedDate) {
+        _endDateController.text = formattedDate;
+      }
+    } else {
+      if (_endDateController.text.isNotEmpty) {
+        _endDateController.clear();
+      }
+    }
   }
 
   Future<void> _selectTime(BuildContext context, bool isStartTime) async {
@@ -225,6 +265,22 @@ class _EditGameScreenState extends ConsumerState<EditGameScreen> {
     }
   }
 
+  Future<void> _selectEndDate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate:
+          _selectedEndDate ?? DateTime.now().add(const Duration(days: 30)),
+      firstDate: _selectedDate.add(const Duration(days: 1)),
+      lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
+    );
+    if (picked != null) {
+      setState(() {
+        _selectedEndDate = picked;
+        _endDateController.text = _formatDate(picked);
+      });
+    }
+  }
+
   Future<void> _updateGame() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -253,11 +309,23 @@ class _EditGameScreenState extends ConsumerState<EditGameScreen> {
         'number_of_teams': int.parse(_numberOfTeamsController.text),
         'start_time': _startTimeController.text,
         'end_time': _endTimeController.text,
-        'game_date': _convertDateToPostgreSQL(_gameDateController.text),
+        'game_date': _selectedFrequency == 'Jogo Avulso'
+            ? _gameDateController.text
+            : null,
         'day_of_week': _selectedDayOfWeek.isEmpty
             ? null
             : _mapDayOfWeekToDatabase(_selectedDayOfWeek),
         'frequency': _selectedFrequency,
+        'end_date':
+            _selectedEndDate != null ? _formatDate(_selectedEndDate!) : null,
+        'price_config': {
+          'monthly': _monthlyPriceController.text.isNotEmpty
+              ? double.tryParse(_monthlyPriceController.text) ?? 0.0
+              : 0.0,
+          'casual': _casualPriceController.text.isNotEmpty
+              ? double.tryParse(_casualPriceController.text) ?? 0.0
+              : 0.0,
+        },
       };
 
       print('📝 Atualizando jogo com dados: $gameData');
@@ -284,6 +352,17 @@ class _EditGameScreenState extends ConsumerState<EditGameScreen> {
               '✅ Sessões recriadas: ${sessionResult['removed_sessions']} removidas, ${sessionResult['created_sessions']} criadas');
         } else {
           print('⚠️ Erro ao recriar sessões: ${sessionResult['error']}');
+          // Se o erro for porque o jogo está deletado, mostrar mensagem específica
+          if (sessionResult['error'] == 'Jogo deletado') {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('⚠️ ${sessionResult['message']}'),
+                  backgroundColor: Colors.orange,
+                ),
+              );
+            }
+          }
         }
       } catch (sessionError) {
         print('⚠️ Erro ao recriar sessões: $sessionError');
@@ -347,6 +426,8 @@ class _EditGameScreenState extends ConsumerState<EditGameScreen> {
     _startTimeController.dispose();
     _endTimeController.dispose();
     _gameDateController.dispose();
+    _monthlyPriceController.dispose();
+    _casualPriceController.dispose();
     super.dispose();
   }
 
@@ -454,50 +535,26 @@ class _EditGameScreenState extends ConsumerState<EditGameScreen> {
 
               const SizedBox(height: 24),
 
-              // Nome da Organização
-              TextFormField(
-                controller: _organizationNameController,
-                decoration: const InputDecoration(
-                  labelText: 'Nome da Organização *',
-                  prefixIcon: Icon(Icons.business),
-                  border: OutlineInputBorder(),
-                ),
+              // Local do Jogo
+              SafeLocationField(
+                labelText: 'Local do Jogo *',
+                hintText: 'Digite o nome do local ou organização...',
+                initialValue: _locationController.text,
+                initialAddress: _addressController.text,
+                onLocationSelected: (location, address, lat, lng) {
+                  // Preencher tanto o local quanto a organização com o mesmo valor
+                  _locationController.text = location;
+                  _organizationNameController.text = location;
+                  if (address != null && address.isNotEmpty) {
+                    _addressController.text = address;
+                  }
+                },
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
-                    return 'Nome da organização é obrigatório';
+                    return 'Local do jogo é obrigatório';
                   }
                   return null;
                 },
-              ),
-
-              const SizedBox(height: 16),
-
-              // Local
-              TextFormField(
-                controller: _locationController,
-                decoration: const InputDecoration(
-                  labelText: 'Local *',
-                  prefixIcon: Icon(Icons.location_on),
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Local é obrigatório';
-                  }
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 16),
-
-              // Endereço
-              TextFormField(
-                controller: _addressController,
-                decoration: const InputDecoration(
-                  labelText: 'Endereço',
-                  prefixIcon: Icon(Icons.home),
-                  border: OutlineInputBorder(),
-                ),
               ),
 
               const SizedBox(height: 16),
@@ -654,7 +711,7 @@ class _EditGameScreenState extends ConsumerState<EditGameScreen> {
 
               const SizedBox(height: 16),
 
-              // Data e Frequência
+              // Frequência
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
@@ -662,28 +719,11 @@ class _EditGameScreenState extends ConsumerState<EditGameScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        '📅 Data e Frequência',
+                        '🔄 Frequência',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _gameDateController,
-                        decoration: const InputDecoration(
-                          labelText: 'Data do Jogo *',
-                          prefixIcon: Icon(Icons.calendar_today),
-                          border: OutlineInputBorder(),
-                        ),
-                        readOnly: true,
-                        onTap: () => _selectDate(context),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Data do jogo é obrigatória';
-                          }
-                          return null;
-                        },
                       ),
                       const SizedBox(height: 16),
                       DropdownButtonFormField<String>(
@@ -702,10 +742,18 @@ class _EditGameScreenState extends ConsumerState<EditGameScreen> {
                         onChanged: (value) {
                           setState(() {
                             _selectedFrequency = value!;
+                            // Inicializar data se for Jogo Avulso
+                            if (value == 'Jogo Avulso' &&
+                                _gameDateController.text.isEmpty) {
+                              _gameDateController.text =
+                                  _formatDate(_selectedDate);
+                            }
+                            // Forçar atualização do campo de data final
+                            _updateEndDateField();
                           });
                         },
                       ),
-                      if (_selectedFrequency != 'Jogo Avulso') ...[
+                      if (_selectedFrequency == 'Semanal') ...[
                         const SizedBox(height: 16),
                         DropdownButtonFormField<String>(
                           initialValue: _selectedDayOfWeek.isEmpty
@@ -735,6 +783,149 @@ class _EditGameScreenState extends ConsumerState<EditGameScreen> {
                           },
                         ),
                       ],
+                    ],
+                  ),
+                ),
+              ),
+
+              // Campo de data final para frequências recorrentes
+              if (_selectedFrequency != 'Jogo Avulso') ...[
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _endDateController,
+                  decoration: const InputDecoration(
+                    labelText: 'Data Final da Recorrência *',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.event_available),
+                    hintText: 'Selecione a data final',
+                    helperText:
+                        'Defina até quando as sessões devem ser criadas',
+                  ),
+                  readOnly: true,
+                  onTap: () => _selectEndDate(context),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Data final é obrigatória para frequências recorrentes';
+                    }
+                    return null;
+                  },
+                ),
+              ],
+
+              const SizedBox(height: 16),
+
+              // Data (apenas para Jogo Avulso)
+              if (_selectedFrequency == 'Jogo Avulso') ...[
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          '📅 Data do Jogo',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _gameDateController,
+                          decoration: const InputDecoration(
+                            labelText: 'Data do Jogo *',
+                            prefixIcon: Icon(Icons.calendar_today),
+                            border: OutlineInputBorder(),
+                          ),
+                          readOnly: true,
+                          onTap: () => _selectDate(context),
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return 'Data do jogo é obrigatória';
+                            }
+                            return null;
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+
+              const SizedBox(height: 16),
+
+              // Preços
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '💰 Preços',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              controller: _monthlyPriceController,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                labelText: 'Mensal',
+                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.calendar_month),
+                                hintText: 'Ex: 50.00',
+                              ),
+                              validator: (value) {
+                                if (value != null && value.isNotEmpty) {
+                                  final price = double.tryParse(value);
+                                  if (price == null || price < 0) {
+                                    return 'Preço inválido';
+                                  }
+                                }
+                                return null;
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: TextFormField(
+                              controller: _casualPriceController,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                labelText: 'Avulso',
+                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.event),
+                                hintText: 'Ex: 15.00',
+                              ),
+                              validator: (value) {
+                                if (value != null && value.isNotEmpty) {
+                                  final price = double.tryParse(value);
+                                  if (price == null || price < 0) {
+                                    return 'Preço inválido';
+                                  }
+                                }
+                                return null;
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Os preços são opcionais. Deixe em branco se não houver cobrança.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
                     ],
                   ),
                 ),

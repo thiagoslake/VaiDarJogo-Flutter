@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'config/supabase_config.dart';
@@ -32,6 +33,11 @@ void main() async {
       // Logar outros erros normalmente
       FlutterError.presentError(details);
     };
+  } else {
+    // Em modo debug, logar todos os erros para facilitar o desenvolvimento
+    FlutterError.onError = (FlutterErrorDetails details) {
+      FlutterError.presentError(details);
+    };
   }
 
   print('🚀 Iniciando VaiDarJogo App...');
@@ -55,6 +61,16 @@ class VaiDarJogoApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'VaiDarJogo',
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('pt', 'BR'), // Português Brasil
+        Locale('en', 'US'), // Inglês como fallback
+      ],
+      locale: const Locale('pt', 'BR'),
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.green,
