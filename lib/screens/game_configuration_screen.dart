@@ -3,8 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'view_game_screen.dart';
 import 'upcoming_sessions_screen.dart';
 import 'edit_game_screen.dart';
-import 'notification_config_screen.dart';
-import 'notification_status_screen.dart';
 import '../providers/selected_game_provider.dart';
 import '../providers/auth_provider.dart';
 
@@ -150,38 +148,6 @@ class GameConfigurationScreen extends ConsumerWidget {
             ),
 
             const SizedBox(height: 12),
-
-            _buildMenuButton(
-              context,
-              title: '4️⃣ Configurar Notificações',
-              subtitle: 'Configurar sistema de notificações para jogos',
-              icon: Icons.notifications,
-              color: Colors.red,
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => const NotificationConfigScreen(),
-                  ),
-                );
-              },
-            ),
-
-            const SizedBox(height: 12),
-
-            _buildMenuButton(
-              context,
-              title: '5️⃣ Status de Notificações',
-              subtitle: 'Ver status das confirmações e lista de espera',
-              icon: Icons.info,
-              color: Colors.teal,
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => const NotificationStatusScreen(),
-                  ),
-                );
-              },
-            ),
           ],
         ),
       ),

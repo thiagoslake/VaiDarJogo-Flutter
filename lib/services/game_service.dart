@@ -1,5 +1,6 @@
 import '../config/supabase_config.dart';
 import 'session_management_service.dart';
+import 'player_confirmation_service.dart';
 
 class GameService {
   static final _client = SupabaseConfig.client;
@@ -29,6 +30,9 @@ class GameService {
 
       // 2. Pausar todas as sessões ativas do jogo
       await _pauseGameSessions(gameId);
+
+      // 3. Remover todas as confirmações dos jogadores
+      await _clearGameConfirmations(gameId);
 
       return true;
     } catch (e) {
@@ -109,6 +113,9 @@ class GameService {
       if (response.isEmpty) {
         throw Exception('Jogo não encontrado');
       }
+
+      // 4. Remover todas as confirmações dos jogadores
+      await _clearGameConfirmations(gameId);
 
       print('✅ Jogo inativado com sucesso (histórico preservado)');
       return true;
@@ -515,6 +522,25 @@ class GameService {
     } catch (e) {
       print('❌ Erro ao marcar sessão como concluída: $e');
       rethrow;
+    }
+  }
+
+  /// Remover todas as confirmações dos jogadores de um jogo
+  static Future<void> _clearGameConfirmations(String gameId) async {
+    try {
+      print('🗑️ Removendo confirmações do jogo: $gameId');
+
+      final deletedCount =
+          await PlayerConfirmationService.deleteAllGameConfirmations(gameId);
+
+      if (deletedCount) {
+        print('✅ Confirmações removidas com sucesso');
+      } else {
+        print('ℹ️ Nenhuma confirmação encontrada para remover');
+      }
+    } catch (e) {
+      print('❌ Erro ao remover confirmações: $e');
+      // Não falha o processo principal se houver erro na remoção de confirmações
     }
   }
 }

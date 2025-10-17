@@ -4,6 +4,7 @@ import '../config/supabase_config.dart';
 import '../providers/selected_game_provider.dart';
 import '../providers/game_status_provider.dart';
 import '../services/session_management_service.dart';
+import '../services/game_update_service.dart';
 import '../widgets/safe_location_field.dart';
 
 class EditGameScreen extends ConsumerStatefulWidget {
@@ -330,43 +331,34 @@ class _EditGameScreenState extends ConsumerState<EditGameScreen> {
 
       print('📝 Atualizando jogo com dados: $gameData');
 
-      // Atualizar jogo no banco
-      await SupabaseConfig.client
-          .from('games')
-          .update(gameData)
-          .eq('id', selectedGame.id);
+      // Usar o novo serviço de atualização completa
+      final updateResult =
+          await GameUpdateService.updateGameWithSessionRecreation(
+        gameId: selectedGame.id,
+        gameData: gameData,
+      );
 
-      // Recriar sessões baseadas nas novas configurações
-      try {
-        print('🔄 Recriando sessões para o jogo atualizado...');
-        final gameDataWithId = {
-          ...gameData,
-          'id': selectedGame.id,
-        };
-        final sessionResult =
-            await SessionManagementService.recreateGameSessions(
-                selectedGame.id, gameDataWithId);
-
-        if (sessionResult['success']) {
-          print(
-              '✅ Sessões recriadas: ${sessionResult['removed_sessions']} removidas, ${sessionResult['created_sessions']} criadas');
-        } else {
-          print('⚠️ Erro ao recriar sessões: ${sessionResult['error']}');
-          // Se o erro for porque o jogo está deletado, mostrar mensagem específica
-          if (sessionResult['error'] == 'Jogo deletado') {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('⚠️ ${sessionResult['message']}'),
-                  backgroundColor: Colors.orange,
-                ),
-              );
-            }
-          }
+      if (updateResult['success']) {
+        print('✅ Jogo atualizado com sucesso:');
+        print(
+            '   - Configurações preservadas: ${updateResult['details']['configurations_preserved']}');
+        print(
+            '   - Confirmações resetadas: ${updateResult['details']['confirmations_reset']}');
+        print(
+            '   - Sessões removidas: ${updateResult['details']['sessions_removed']}');
+        print(
+            '   - Sessões criadas: ${updateResult['details']['sessions_created']}');
+      } else {
+        print('❌ Erro na atualização: ${updateResult['error']}');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('❌ ${updateResult['message']}'),
+              backgroundColor: Colors.red,
+            ),
+          );
         }
-      } catch (sessionError) {
-        print('⚠️ Erro ao recriar sessões: $sessionError');
-        // Não falha a atualização do jogo se houver erro nas sessões
+        return;
       }
 
       // Atualizar providers
@@ -388,10 +380,19 @@ class _EditGameScreenState extends ConsumerState<EditGameScreen> {
       }
 
       if (mounted) {
+        final details = updateResult['details'];
+        final configPreserved = details['configurations_preserved']
+            ? 'Configurações preservadas'
+            : 'Sem configurações';
+        final confirmationsReset = details['confirmations_reset'];
+        final sessionsCreated = details['sessions_created'];
+
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Jogo atualizado com sucesso! Sessões recriadas.'),
+          SnackBar(
+            content: Text(
+                '✅ Jogo atualizado! $configPreserved, $confirmationsReset confirmações resetadas, $sessionsCreated sessões criadas.'),
             backgroundColor: Colors.green,
+            duration: const Duration(seconds: 4),
           ),
         );
         Navigator.of(context).pop();

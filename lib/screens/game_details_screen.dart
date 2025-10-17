@@ -8,9 +8,9 @@ import '../services/player_service.dart';
 import '../services/game_service.dart';
 import 'upcoming_sessions_screen.dart';
 import 'edit_game_screen.dart';
-import 'notification_config_screen.dart';
-import 'notification_status_screen.dart';
 import 'game_players_screen.dart';
+import 'game_confirmation_config_screen.dart';
+import 'manual_player_confirmation_screen.dart';
 
 class GameDetailsScreen extends ConsumerStatefulWidget {
   final String gameId;
@@ -345,34 +345,6 @@ class _GameDetailsScreenState extends ConsumerState<GameDetailsScreen> {
                   },
                 ),
                 _buildConfigOption(
-                  icon: Icons.notifications,
-                  title: 'Configurar Notificações',
-                  subtitle: 'Definir alertas e lembretes',
-                  color: Colors.purple,
-                  onTap: () {
-                    ref.read(selectedGameProvider.notifier).state = game;
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => const NotificationConfigScreen(),
-                      ),
-                    );
-                  },
-                ),
-                _buildConfigOption(
-                  icon: Icons.info,
-                  title: 'Status das Notificações',
-                  subtitle: 'Ver histórico de envios',
-                  color: Colors.teal,
-                  onTap: () {
-                    ref.read(selectedGameProvider.notifier).state = game;
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => const NotificationStatusScreen(),
-                      ),
-                    );
-                  },
-                ),
-                _buildConfigOption(
                   icon: Icons.people,
                   title: 'Gerenciar Jogadores',
                   subtitle: 'Ver e editar participantes',
@@ -386,6 +358,39 @@ class _GameDetailsScreenState extends ConsumerState<GameDetailsScreen> {
                     );
                   },
                 ),
+                _buildConfigOption(
+                  icon: Icons.confirmation_number,
+                  title: 'Configurar Confirmação de Presença',
+                  subtitle: 'Definir quando enviar confirmações',
+                  color: Colors.cyan,
+                  onTap: () {
+                    ref.read(selectedGameProvider.notifier).state = game;
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            const GameConfirmationConfigScreen(),
+                      ),
+                    );
+                  },
+                ),
+                // Confirmação Manual só aparece para jogos ativos
+                if (game.status == 'active') ...[
+                  _buildConfigOption(
+                    icon: Icons.checklist,
+                    title: 'Confirmação Manual de Jogadores',
+                    subtitle: 'Confirmar presença dos jogadores',
+                    color: Colors.teal,
+                    onTap: () {
+                      ref.read(selectedGameProvider.notifier).state = game;
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              const ManualPlayerConfirmationScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                ],
                 // Opções baseadas no status do jogo
                 _buildStatusBasedOptions(game),
               ],
@@ -634,6 +639,14 @@ class _GameDetailsScreenState extends ConsumerState<GameDetailsScreen> {
                 fontWeight: FontWeight.w500,
               ),
             ),
+            const SizedBox(height: 8),
+            const Text(
+              '⚠️ Todas as confirmações de presença serão removidas.',
+              style: TextStyle(
+                color: Colors.orange,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ],
         ),
         actions: [
@@ -784,7 +797,7 @@ class _GameDetailsScreenState extends ConsumerState<GameDetailsScreen> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'O que será feito:\n• Jogo será marcado como inativo\n• Sessões futuras serão removidas\n• Histórico de sessões passadas será preservado\n• Relacionamentos com jogadores serão inativados',
+              'O que será feito:\n• Jogo será marcado como inativo\n• Sessões futuras serão removidas\n• Histórico de sessões passadas será preservado\n• Relacionamentos com jogadores serão inativados\n• Todas as confirmações de presença serão removidas',
               style: TextStyle(
                 color: Colors.orange,
                 fontWeight: FontWeight.w500,

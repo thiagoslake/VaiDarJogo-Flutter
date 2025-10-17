@@ -1,7 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/supabase_config.dart';
 import '../providers/selected_game_provider.dart';
+import '../services/player_confirmation_service.dart';
+import '../constants/app_colors.dart';
 
 class UpcomingSessionsScreen extends ConsumerStatefulWidget {
   const UpcomingSessionsScreen({super.key});
@@ -240,7 +243,7 @@ class _UpcomingSessionsScreenState
             itemCount: _sessions.length,
             itemBuilder: (context, index) {
               final session = _sessions[index];
-              return _buildSessionCard(session, index + 1);
+              return _buildSessionCard(session, index);
             },
           ),
         ),
@@ -258,6 +261,9 @@ class _UpcomingSessionsScreenState
     final sessionDateOnly =
         DateTime(sessionDate.year, sessionDate.month, sessionDate.day);
     final isPastSession = sessionDateOnly.isBefore(todayDate);
+
+    // Verificar se é a próxima sessão (primeira sessão futura)
+    final isNextSession = _isNextSession(session, index);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -285,7 +291,7 @@ class _UpcomingSessionsScreenState
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      '$index',
+                      '${index + 1}',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         color: isPastSession ? Colors.grey : Colors.purple,
@@ -529,6 +535,29 @@ class _UpcomingSessionsScreenState
                   ],
                 ),
               ],
+
+              const SizedBox(height: 12),
+
+              // Botão para ver jogadores confirmados (apenas para a próxima sessão)
+              if (isNextSession) ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () => _showConfirmedPlayers(context, session),
+                    icon: const Icon(Icons.people, size: 18),
+                    label: const Text('Ver Jogadores Confirmados'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -685,6 +714,409 @@ class _UpcomingSessionsScreenState
         return 'Em Andamento';
       default:
         return status ?? 'Não definido';
+    }
+  }
+
+  Future<void> _showConfirmedPlayers(
+      BuildContext context, Map<String, dynamic> session) async {
+    final selectedGame = ref.read(selectedGameProvider);
+    if (selectedGame == null) return;
+
+    // Mostrar loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+
+    try {
+      // Buscar jogadores confirmados
+      final confirmedPlayers =
+          await PlayerConfirmationService.getConfirmedPlayers(
+        selectedGame.id,
+      );
+
+      // Fechar loading
+      if (context.mounted) {
+        Navigator.of(context).pop();
+      }
+
+      // Mostrar modal com jogadores confirmados
+      if (context.mounted) {
+        _showConfirmedPlayersModal(context, session, confirmedPlayers);
+      }
+    } catch (e) {
+      // Fechar loading
+      if (context.mounted) {
+        Navigator.of(context).pop();
+      }
+
+      // Mostrar erro
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro ao carregar jogadores confirmados: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _showConfirmedPlayersModal(
+    BuildContext context,
+    Map<String, dynamic> session,
+    List<Map<String, dynamic>> confirmedPlayers,
+  ) {
+    final sessionDate = DateTime.parse(session['session_date']);
+    final formattedDate = _formatDate(sessionDate);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Jogadores Confirmados',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              formattedDate,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: confirmedPlayers.isEmpty
+              ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.people_outline,
+                      size: 48,
+                      color: AppColors.textSecondary,
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Nenhum jogador confirmado',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Ainda não há confirmações para esta sessão',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                )
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Estatísticas
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: AppColors.primary.withOpacity(0.3),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          _buildStatItem(
+                            'Total',
+                            confirmedPlayers.length.toString(),
+                            AppColors.primary,
+                            Icons.people,
+                          ),
+                          _buildStatItem(
+                            'Mensalistas',
+                            confirmedPlayers
+                                .where((p) =>
+                                    p['game_players']['player_type'] ==
+                                    'monthly')
+                                .length
+                                .toString(),
+                            AppColors.primary,
+                            Icons.star,
+                          ),
+                          _buildStatItem(
+                            'Avulsos',
+                            confirmedPlayers
+                                .where((p) =>
+                                    p['game_players']['player_type'] ==
+                                    'casual')
+                                .length
+                                .toString(),
+                            AppColors.secondary,
+                            Icons.person,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Lista de jogadores
+                    SizedBox(
+                      height: 300,
+                      child: ListView.builder(
+                        itemCount: confirmedPlayers.length,
+                        itemBuilder: (context, index) {
+                          final player = confirmedPlayers[index];
+                          final playerName =
+                              player['players']['name'] ?? 'Nome não informado';
+                          final playerType =
+                              player['game_players']['player_type'] ?? 'casual';
+                          final confirmedAt = player['confirmed_at'];
+                          final notes = player['notes'];
+
+                          return Card(
+                            color: AppColors.card,
+                            margin: const EdgeInsets.only(bottom: 8),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Row(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 16,
+                                    backgroundColor:
+                                        AppColors.primary.withOpacity(0.2),
+                                    child: Text(
+                                      playerName.isNotEmpty
+                                          ? playerName[0].toUpperCase()
+                                          : '?',
+                                      style: const TextStyle(
+                                        color: AppColors.primary,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          playerName,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Row(
+                                          children: [
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 6,
+                                                vertical: 2,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: playerType == 'monthly'
+                                                    ? AppColors.primary
+                                                        .withOpacity(0.2)
+                                                    : AppColors.secondary
+                                                        .withOpacity(0.2),
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                              ),
+                                              child: Text(
+                                                playerType == 'monthly'
+                                                    ? 'Mensal'
+                                                    : 'Avulso',
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  color: playerType == 'monthly'
+                                                      ? AppColors.primary
+                                                      : AppColors.secondary,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Icon(
+                                              Icons.check_circle,
+                                              color: Colors.green,
+                                              size: 14,
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              'Confirmado',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                color: Colors.green,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        if (confirmedAt != null) ...[
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            'Confirmado em: ${_formatDateTime(confirmedAt)}',
+                                            style: const TextStyle(
+                                              color: AppColors.textSecondary,
+                                              fontSize: 10,
+                                            ),
+                                          ),
+                                        ],
+                                        if (notes != null &&
+                                            notes.isNotEmpty) ...[
+                                          const SizedBox(height: 4),
+                                          Container(
+                                            width: double.infinity,
+                                            padding: const EdgeInsets.all(8),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.background,
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                              border: Border.all(
+                                                color: AppColors.dividerLight,
+                                              ),
+                                            ),
+                                            child: Text(
+                                              notes,
+                                              style: const TextStyle(
+                                                color: AppColors.textSecondary,
+                                                fontSize: 11,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text(
+              'Fechar',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatItem(
+      String label, String value, Color color, IconData icon) {
+    return Column(
+      children: [
+        Icon(
+          icon,
+          color: color,
+          size: 16,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: color,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            color: color.withOpacity(0.8),
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _formatDateTime(String dateTimeString) {
+    try {
+      final dateTime = DateTime.parse(dateTimeString);
+      return '${dateTime.day.toString().padLeft(2, '0')}/'
+          '${dateTime.month.toString().padLeft(2, '0')}/'
+          '${dateTime.year} '
+          '${dateTime.hour.toString().padLeft(2, '0')}:'
+          '${dateTime.minute.toString().padLeft(2, '0')}';
+    } catch (e) {
+      return dateTimeString;
+    }
+  }
+
+  /// Verifica se a sessão atual é a próxima sessão (primeira sessão futura)
+  bool _isNextSession(Map<String, dynamic> currentSession, int currentIndex) {
+    try {
+      final today = DateTime.now();
+      final todayDate = DateTime(today.year, today.month, today.day);
+      final currentSessionDate = DateTime.parse(currentSession['session_date']);
+      final currentSessionDateOnly = DateTime(
+        currentSessionDate.year,
+        currentSessionDate.month,
+        currentSessionDate.day,
+      );
+
+      // LÓGICA SIMPLES: Validar cada sessão se é maior que a data de hoje (futura)
+      // A primeira vez que isso for verdade, escolher essa sessão
+      for (int i = 0; i < _sessions.length; i++) {
+        final session = _sessions[i];
+        final sessionDate = DateTime.parse(session['session_date']);
+        final sessionDateOnly = DateTime(
+          sessionDate.year,
+          sessionDate.month,
+          sessionDate.day,
+        );
+
+        // Se encontrou a primeira sessão que é maior que hoje (futura)
+        if (sessionDateOnly.isAfter(todayDate)) {
+          // Se é a sessão atual, então é a próxima
+          if (i == currentIndex) {
+            return true;
+          } else {
+            return false;
+          }
+        }
+      }
+
+      // Se chegou até aqui, não há sessões futuras
+      return false;
+    } catch (e) {
+      print('❌ Erro ao verificar se é próxima sessão: $e');
+      return false;
     }
   }
 }
